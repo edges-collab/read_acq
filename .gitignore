@@ -1,0 +1,7 @@
+build/
+data/
+read_acq\.egg-info/
+
+*.pyc
+
+*.so
