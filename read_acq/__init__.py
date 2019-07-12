@@ -75,7 +75,7 @@ def _get_tcal(fname, tcal=None):
     if tcal is None:
         dr = os.path.join(os.path.dirname(fname), path.pardir, "Resistance")
         try:
-            tcal = glob.glob(os.path.join(dr, "*.csv")[0]
+            tcal = glob.glob(os.path.join(dr, "*.csv"))[0]
         except IndexError:
             raise ValueError("tcal not given, and no relevant tcal file found at ../Restistance/")
 
@@ -108,7 +108,7 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
     tcal = _get_tcal(fname, tcal)
     print("Tcal = ", tcal)
     print("Tload = ", tload)
-    
+
     # count lines
     ntimes = 0
     with open(fname, 'r') as fl:
