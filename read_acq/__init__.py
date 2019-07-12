@@ -75,7 +75,6 @@ def decode_file(fname, tcal=400, tload=300, nchannels=16384 * 2, outfile=None, w
     nchannels: int, optional
 
     """
-    print("_write_mat" in globals())
     # count lines
     ntimes = 0
     with open(fname, 'r') as fl:

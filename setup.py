@@ -50,7 +50,9 @@ setup(
     ],
     install_requires=[
         'numpy',
-        'tqdm'
+        'tqdm',
+        'scipy',
+        'click'
     ],
     ext_modules=[
         Extension(
