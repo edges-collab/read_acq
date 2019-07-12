@@ -26,7 +26,7 @@ main = click.Group()
     type=click.Path(exists=False, dir_okay=False),
 )
 @click.option(
-    '--tcal', default=400,
+    '--tcal', default=None,
     help="calibration temperature"
 )
 @click.option(

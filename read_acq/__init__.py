@@ -106,7 +106,9 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
 
     """
     tcal = _get_tcal(fname, tcal)
-
+    print("Tcal = ", tcal)
+    print("Tload = ", tload)
+    
     # count lines
     ntimes = 0
     with open(fname, 'r') as fl:
