@@ -62,9 +62,18 @@ def _write_mat(infile=None, outfile=None, **data):
 def decode_file(fname, tcal=400, tload=300, nchannels=16384 * 2, outfile=None, write_formats=None,
                 progress=True, ):
     """
-    Parse and read a line of an ACQ file.
-    :param line: string line.
-    :return: 1D-array of data.
+    Parse and decode an ACQ file, optionally writing it to a new format.
+
+    Parameters
+    ----------
+    fname : str or Path
+        filename of the ACQ file to read.
+    tcal : float, optional
+        The calibration temperature
+    tload: float, optional
+        The load temperature
+    nchannels: int, optional
+
     """
     print("_write_mat" in globals())
     # count lines
@@ -143,8 +152,8 @@ def decode_file(fname, tcal=400, tload=300, nchannels=16384 * 2, outfile=None, w
         try:
             globals()['_write_%s' % fmt](
                 infile=fname, outfile=outfile,
-                **{'p{}'.format(i): p[i] for i in range(3)},
                 ant_temp=ant_temp,
+                **{'p{}'.format(i): p[i] for i in range(3)},
             )
         except KeyError as e:
             print(e)
