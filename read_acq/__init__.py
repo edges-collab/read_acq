@@ -5,6 +5,7 @@ import os
 import re
 from os import path
 import sys
+from pathlib import Path
 
 import numpy as np
 import tqdm
@@ -59,7 +60,36 @@ def _write_mat(infile=None, outfile=None, **data):
     io.savemat(outfile + '.mat', data)
 
 
-def decode_file(fname, tcal=400, tload=300, nchannels=16384 * 2, outfile=None, write_formats=None,
+_part_coeffs = {
+    'TR136_170': (1.03514e-3, 2.33825e-4, 7.92467e-8),
+}
+
+
+def convert_thermistor_ohm_to_kelvin(r, partname='TR136_170'):
+    a = _part_coeffs[partname]
+    return 1/(a[0] + a[1]*np.log(r) + a[2]*np.log(r)**3)
+
+
+def _get_tcal(fname, tcal=None):
+
+    if tcal is None:
+        dr = os.path.join(os.path.dirname(fname), path.pardir, "Resistance")
+        try:
+            tcal = glob.glob(os.path.join(dr, "*.csv")[0]
+        except IndexError:
+            raise ValueError("tcal not given, and no relevant tcal file found at ../Restistance/")
+
+    if type(tcal) == str:
+        tcal = Path(tcal)
+
+    if isinstance(tcal, Path):
+        data = np.genfromtxt(tcal, usecols=3, delimiter=',')
+        tcal = np.mean(data[len(data)//20:])
+        tcal = convert_thermistor_ohm_to_kelvin(tcal)
+
+    return tcal
+
+def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, write_formats=None,
                 progress=True, ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -68,13 +98,15 @@ def decode_file(fname, tcal=400, tload=300, nchannels=16384 * 2, outfile=None, w
     ----------
     fname : str or Path
         filename of the ACQ file to read.
-    tcal : float, optional
+    tcal : float or str/Path, optional
         The calibration temperature
     tload: float, optional
         The load temperature
     nchannels: int, optional
 
     """
+    tcal = _get_tcal(fname, tcal)
+
     # count lines
     ntimes = 0
     with open(fname, 'r') as fl:
@@ -83,6 +115,7 @@ def decode_file(fname, tcal=400, tload=300, nchannels=16384 * 2, outfile=None, w
                 switch_state = int(line.split()[1])
                 if switch_state == 2:
                     ntimes += 1
+
 
     p = [np.empty((ntimes, nchannels)),
          np.empty((ntimes, nchannels)),
