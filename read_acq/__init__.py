@@ -4,7 +4,6 @@ import glob
 import os
 import re
 from os import path
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -60,18 +59,31 @@ def _write_mat(infile=None, outfile=None, **data):
     io.savemat(outfile + '.mat', data)
 
 
-_part_coeffs = {
+PART_COEFFS = {
     'TR136_170': (1.03514e-3, 2.33825e-4, 7.92467e-8),
 }
 
 
 def convert_thermistor_ohm_to_kelvin(r, partname='TR136_170'):
-    a = _part_coeffs[partname]
-    return 1/(a[0] + a[1]*np.log(r) + a[2]*np.log(r)**3)
+    """
+    Convert thermistor resistance to temperature
+
+    Parameters
+    ----------
+    r : float
+        Resistance
+    partname: str, optional
+        The name of the thermistor product. Must exist in `PART_COEFFS`
+
+    Returns
+    -------
+    float: temperature in K.
+    """
+    a = PART_COEFFS[partname]
+    return 1 / (a[0] + a[1] * np.log(r) + a[2] * np.log(r) ** 3)
 
 
 def _get_tcal(fname, tcal=None):
-
     if tcal is None:
         dr = os.path.join(os.path.dirname(fname), path.pardir, "Resistance")
         try:
@@ -84,10 +96,11 @@ def _get_tcal(fname, tcal=None):
 
     if isinstance(tcal, Path):
         data = np.genfromtxt(tcal, usecols=3, delimiter=',')
-        tcal = np.mean(data[len(data)//20:])
+        tcal = np.mean(data[len(data) // 20:])
         tcal = convert_thermistor_ohm_to_kelvin(tcal)
 
     return tcal
+
 
 def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, write_formats=None,
                 progress=True, ):
@@ -99,11 +112,19 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
     fname : str or Path
         filename of the ACQ file to read.
     tcal : float or str/Path, optional
-        The calibration temperature
+        The calibration temperature. If given as a str or Path, will attempt to read
+        the given CSV file and take an average cal temperature. By default, looks in
+        `../Resistance/` for this file.
     tload: float, optional
         The load temperature
     nchannels: int, optional
-
+        Number of channels in the data.
+    outfile: str, optional
+        Filename to which to write the data. Only used if `write_formats` is not empty.
+    write_formats: list of str, optional
+        Can contain any of 'mat' and 'npz'.
+    progress: bool, optional
+        Whether to display a progress bar for the read.
     """
     tcal = _get_tcal(fname, tcal)
     print("Tcal = ", tcal)
@@ -118,7 +139,6 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
                 if switch_state == 2:
                     ntimes += 1
 
-
     p = [np.empty((ntimes, nchannels)),
          np.empty((ntimes, nchannels)),
          np.empty((ntimes, nchannels))]
@@ -128,7 +148,7 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
     i_time = 0
     splits = re.compile(r"[\w']+")
     with open(fname, 'r') as fl:
-        for line in tqdm.tqdm(fl.readlines(), disable=not progress, total=3*ntimes):
+        for line in tqdm.tqdm(fl.readlines(), disable=not progress, total=3 * ntimes):
             # Break when we hit the last "2" switch state (there may be a dangling 0 and 1)
             if i_time == ntimes:
                 break
@@ -197,5 +217,6 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
 
 
 def decode_files(files, *args, **kwargs):
+    """Call :func:`decode_file` on a list of files."""
     for fl in tqdm.tqdm(files, disable=len(files) < 5):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
