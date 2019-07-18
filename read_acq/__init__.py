@@ -206,8 +206,8 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
         try:
             globals()['_write_%s' % fmt](
                 infile=fname, outfile=outfile,
-                ant_temp=ant_temp,
-                **{'p{}'.format(i): p[i] for i in range(3)},
+                ant_temp=ant_temp.T,
+                **{'p{}'.format(i): p[i].T for i in range(3)},
             )
         except KeyError as e:
             print(e)
