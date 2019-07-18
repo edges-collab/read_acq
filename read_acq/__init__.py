@@ -96,7 +96,7 @@ def _get_tcal(fname, tcal=None):
 
     if isinstance(tcal, Path):
         data = np.genfromtxt(tcal, usecols=3, delimiter=',')
-        if np.average(data)>55 and np.average(data)<45:
+        if np.average(data)<55 and np.average(data)>45:
             tcal=350
         else:
             tcal = np.mean(data[len(data) // 20:])
