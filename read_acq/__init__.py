@@ -96,8 +96,12 @@ def _get_tcal(fname, tcal=None):
 
     if isinstance(tcal, Path):
         data = np.genfromtxt(tcal, usecols=3, delimiter=',')
-        tcal = np.mean(data[len(data) // 20:])
-        tcal = convert_thermistor_ohm_to_kelvin(tcal)
+        if np.average(data)>55 and np.average(data)<45:
+            tcal=350
+        else:
+            tcal = np.mean(data[len(data) // 20:])
+            tcal = convert_thermistor_ohm_to_kelvin(tcal)
+        #default should be 300 if data is between 45 and 55
 
     return tcal
 
