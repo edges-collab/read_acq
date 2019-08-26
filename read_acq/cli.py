@@ -27,7 +27,7 @@ main = click.Group()
     type=click.Path(exists=False, dir_okay=False),
 )
 @click.option(
-    '-f', '--format', default='mat',
+    '-f', '--format', default=('mat',),
     multiple=True, type=click.Choice(['mat', 'h5', 'npz'])
 )
 def convert(infile, outfile, format):
