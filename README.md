@@ -5,14 +5,11 @@ Read ACQ files for EDGES.
 
 ## Installation
 
-At this time, you will first need to ensure that `numpy` is installed (`pip install numpy`)
-or (`conda install numpy`).
-
-Then, you can simply run `pip install git+https://github.com/edges-collab/read_acq`.
+In a new/existing python environment, run
+`pip install git+https://github.com/edges-collab/read_acq`.
 
 If you wish to develop `read_acq`, do the following::
 
-    conda install numpy
     git clone https://github.com/edges-collab/read_acq
     cd read_acq
     pip install -e .
@@ -21,20 +18,23 @@ If you wish to develop `read_acq`, do the following::
 
 `read_acq` can be used in a Python interpreter or directly via the command line. 
 
+### CLI
 To use the CLI, a single command is provided:
 
-    acq convert <data.acq> [<data2.acq> ...]
+    acq convert <data.acq> [<data2.acq> ...] [-f format1 [-f format2]]
     
-This will convert the file provided to a `.mat` format, and place the resulting `.mat`
-file in the same location as the original datafile (but with different extension). 
+This will convert the file(s) provided to all formats provided, and place any resulting 
+files in the same location as the original datafile(s) (but with different extension). 
+The default format is 'mat'.
 The command can be run from anywhere on the system, and the file given can be a 
 relative or absolute path. 
 
-Multiple data files will be given, and each will be converted. Wildcards may also be
+Multiple data files can be given, and each will be converted. Wildcards may also be
 used in any of the filenames, eg.:
 
     acq convert data/*.acq
     
+### Library
 The main point of entry for the Python interface is `decode_file`:
 
     >>> from read_acq import decode_file

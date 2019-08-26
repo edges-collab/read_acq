@@ -31,7 +31,7 @@ setup(
     ),
     author='EDGES Collaboration',
     author_email='steven.g.murray@asu.edu',
-    # url='https://github.com/steven-murray/read_acq',
+    url='https://github.com/edges-collab/read_acq',
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
@@ -54,6 +54,11 @@ setup(
         'scipy',
         'click'
     ],
+    extras_require={
+        'all': [
+            'h5py'
+        ]
+    },
     ext_modules=[
         Extension(
             'read_acq.decode',

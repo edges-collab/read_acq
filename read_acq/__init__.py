@@ -1,4 +1,3 @@
-import copy
 import ctypes
 import glob
 import os
@@ -333,5 +332,5 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
 
 def decode_files(files, *args, **kwargs):
     """Call :func:`decode_file` on a list of files."""
-    for fl in tqdm.tqdm(files, disable=len(files) < 5):
+    for fl in tqdm.tqdm(files, disable=len(files) < 5, desc="Processing files", unit='files'):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
