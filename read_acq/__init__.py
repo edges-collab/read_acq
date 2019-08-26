@@ -3,12 +3,20 @@ import ctypes
 import glob
 import os
 import re
+import warnings
 from os import path
 from pathlib import Path
 
 import numpy as np
 import tqdm
-from scipy import io
+from . import writers
+
+try:
+    import h5py
+
+    HAVE_H5PY = True
+except ImportError:
+    HAVE_H5PY = False
 
 cdll = glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so"))[0]
 cdll = ctypes.CDLL(cdll)
@@ -38,25 +46,6 @@ def _decode_line(line):
         raise Exception("C decoder exited with an error!")
 
     return out
-
-
-def _get_fname(infile=None, outfile=None):
-    if infile and not outfile:
-        outfile = path.splitext(infile)[0]
-    elif not outfile and not infile:
-        raise Exception("You need to provide either outfile or infile!")
-
-    return outfile
-
-
-def _write_npz(infile=None, outfile=None, **data):
-    outfile = _get_fname(infile, outfile)
-    np.savez(outfile, **data)
-
-
-def _write_mat(infile=None, outfile=None, **data):
-    outfile = _get_fname(infile, outfile)
-    io.savemat(outfile + '.mat', data)
 
 
 PART_COEFFS = {
@@ -102,7 +91,143 @@ def _get_tcal(fname, tcal=None):
     return tcal
 
 
-def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, write_formats=None,
+class Ancillary:
+    """Represents ancillary data of a file"""
+    header_char = ";"
+    DTYPE = np.dtype([
+        ('adcmax', np.float32),
+        ('adcmin', np.float32),
+        ("time", "S17"),
+    ])
+
+    _splits = re.compile(r"[\d\.:]+")
+
+    def __init__(self, fname):
+        self.check_file(fname)
+
+        self.size, nlines = self.get_ntimes(fname)
+        self.meta = self.read_metadata(fname)
+
+        self.meta['n_file_lines'] = nlines
+
+        self.data = np.zeros(self.size, dtype=self.DTYPE)
+        self._current_size = 0
+
+    def check_file(self, fname):
+        with open(fname) as fl:
+            cline = ''
+            while not cline.startswith('#'):
+                cline = fl.readline()
+
+        cline = self._splits.findall(cline)
+        if int(cline[0]) != 0:
+            raise IOError("The format of the ACQ file is incorrect: should start with swpos = 0")
+
+    def _read_header(self, fname):
+        out = {}
+
+        name_pattern = re.compile(r"[a-zA-Z_]+")
+        type_order = [int, float, str]
+
+        with open(fname) as fl:
+            for line in fl.readlines():
+                if not line.startswith(self.header_char):
+                    break
+                name, val = line.split(":")
+                name = name_pattern.findall(name)[0]
+                for tp in type_order:
+                    try:
+                        out[name] = tp(val.split()[0])
+                        break
+                    except (ValueError, IndexError):
+                        pass
+
+        return out
+
+    def read_metadata(self, fname):
+        out = self._read_header(fname)
+
+        with open(fname) as fl:
+            cline = ''
+            while not cline.startswith("#"):
+                cline = fl.readline()
+            dateline = fl.readline()
+
+        cline = self._splits.findall(cline)
+        dateline = self._splits.findall(dateline)
+
+        out.update(
+            {
+                "resolution": float(cline[1]),
+                "temperature": float(cline[4]),
+                'nblk': int(cline[5]),
+                'nfreq': int(cline[6]),
+                'freq_min': float(dateline[2]),
+                'freq_max': float(dateline[4]),
+                'freq_res': float(dateline[3])
+            }
+        )
+        return out
+
+    @property
+    def frequencies(self):
+        return np.linspace(self.meta['freq_min'], self.meta['freq_max'], self.meta['nfreq'])
+
+    def __getitem__(self, item):
+        try:
+            # treat it as an int
+            return self.data[int(item)]
+        except ValueError:
+            # try it as a time
+            return self.data[self.data['time'] == item]
+
+    def get_ntimes(self, fname):
+        # count lines
+        ntimes = 0
+        with open(fname, 'r') as fl:
+            nlines = 0
+            for line in fl.readlines():
+                if line[0] not in '#*;' and line:
+                    ntimes += 1
+                nlines += 1
+        return ntimes // 3, nlines
+
+    @property
+    def times(self):
+        """The times associated with the ancillary data as datetime objects"""
+        raise NotImplementedError("We haven't done this yet.")
+
+    def _add_to_self(self, add_to_self=None):
+        if add_to_self is None:
+            add_to_self = self._current_size < self.size
+        elif add_to_self and self._current_size == self.size:
+            raise ValueError("You cannot add any more lines to this object")
+        return add_to_self
+
+    def parse_cline(self, line, add_to_self=None):
+        add_to_self = self._add_to_self(add_to_self)
+        line = self._splits.findall(line)
+
+        if add_to_self:
+            self.data[self._current_size]['adcmax'] = line[2]
+            self.data[self._current_size]['adcmin'] = line[3]
+        else:
+            return {"adcmax": float(line[2]), "admin": float(line[3])}
+
+    def parse_specline(self, line, add_to_self=None):
+        """Parse an ancillary data line of a file, and return a dict"""
+        add_to_self = self._add_to_self(add_to_self)
+
+        line = self._splits.findall(line)
+
+        if add_to_self:
+            self.data[self._current_size]['time'] = line[0]
+            self._current_size += 1
+        else:
+            return [line[0]] + line[2:]
+
+
+def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
                 progress=True, ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -127,56 +252,51 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
         Whether to display a progress bar for the read.
     """
     tcal = _get_tcal(fname, tcal)
-    print("Tcal = ", tcal)
-    print("Tload = ", tload)
 
-    # count lines
-    ntimes = 0
+    for fmt in write_formats:
+        if fmt not in writers._WRITERS:
+            raise ValueError("The format {} does not have an associated writer.".format(fmt))
+
+    anc = Ancillary(fname)
+    ntimes = anc.size
+
+    p = [np.empty((ntimes, anc.meta['nfreq']))] * 3
+
+    i = 0
     with open(fname, 'r') as fl:
-        for line in fl.readlines():
-            if line[0] not in '#*' and line:
-                switch_state = int(line.split()[1])
-                if switch_state == 2:
-                    ntimes += 1
+        for line in tqdm.tqdm(
+                fl.readlines(), disable=not progress, total=anc.meta['n_file_lines'],
+                desc="Reading {}".format(fname), unit='lines'
+        ):
+            switch_state = i % 3
+            i_time = i // 3
 
-    p = [np.empty((ntimes, nchannels)),
-         np.empty((ntimes, nchannels)),
-         np.empty((ntimes, nchannels))]
-
-    anc = []
-
-    i_time = 0
-    splits = re.compile(r"[\w']+")
-    with open(fname, 'r') as fl:
-        for line in tqdm.tqdm(fl.readlines(), disable=not progress, total=3 * ntimes):
             # Break when we hit the last "2" switch state (there may be a dangling 0 and 1)
             if i_time == ntimes:
                 break
 
-            if not line or line[0] in '#*':  # Empty line.
+            if not line.strip() or line[0] in "*;":  # Empty line.
+                continue
+
+            if line.startswith("#"):  # comment line
+                anc.parse_cline(line)
                 continue
 
             try:
                 line_ancillary, data_string = line.split("spectrum")
-            except:
+            except ValueError:
                 # Uh-oh, we probably have an incomplete file.
-                raise Exception('Failed to parse ancillary data.')
-
-            # Split ancillary into a list of ancillary data
-            line_ancillary = splits.findall(line_ancillary)
+                raise Exception('Formatting of ACQ file is incorrect on line starting\n{}'.format(line[:50]))
 
             # Read the spectrum
             spec = _decode_line(data_string.lstrip())
-            total_power = np.sum(spec)
+
+            # Parse ancillary data
+            if not switch_state:
+                anc.parse_specline(line_ancillary)
 
             # Check the switch state and act accordingly
-            switch_state = int(line_ancillary[5])
             p[switch_state][i_time] = spec
-
-            if switch_state == 0:
-                ancillary = copy.copy(line_ancillary)
-
-            ancillary.append(total_power)
 
             # Move on unless switch is 2.
             if switch_state < 2:
@@ -187,31 +307,26 @@ def decode_file(fname, tcal=None, tload=300, nchannels=16384 * 2, outfile=None, 
                 # p are different lengths!
                 raise Exception('Error: Failed to calibrate.')
 
-            anc.append(ancillary)
-
             i_time += 1
-
-    if switch_state < 1:
-        p[1] = p[1][:-1]
-    if switch_state < 2:
-        p[2] = p[2][:-1]
+            i += 1
 
     # Get antenna temperature
-    ant_temp = (p[0] - p[1]) / (p[2] - p[1]) * tcal + tload
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        ant_temp = (p[0] - p[1]) / (p[2] - p[1]) * tcal + tload
 
     if write_formats is None:
         write_formats = ['mat']
 
     for fmt in write_formats:
-        try:
-            globals()['_write_%s' % fmt](
-                infile=fname, outfile=outfile,
-                ant_temp=ant_temp.T,
-                **{'p{}'.format(i): p[i].T for i in range(3)},
-            )
-        except KeyError as e:
-            print(e)
-            raise NotImplementedError("the format {} is not supported".format(fmt))
+        getattr(writers, '_write_%s' % fmt)(
+            outfile=outfile or fname,
+            ancillary=anc.meta,
+            ant_temp=ant_temp.T,
+            time_data=anc.data,
+            freqs=anc.frequencies,
+            **{'p{}'.format(i): p[i].T for i in range(3)},
+        )
 
     return ant_temp, p
 
