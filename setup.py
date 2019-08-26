@@ -55,6 +55,9 @@ setup(
         'click'
     ],
     extras_require={
+        'dev': [
+            'bump2version',
+        ],
         'all': [
             'h5py'
         ]
