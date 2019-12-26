@@ -27,7 +27,7 @@ main = click.Group()
     type=click.Path(exists=False, dir_okay=False),
 )
 @click.option(
-    '-f', '--format', default=('mat',),
+    '-f', '--format', default='mat',
     multiple=True, type=click.Choice(['mat', 'h5', 'npz'])
 )
 def convert(infile, outfile, format):
@@ -36,4 +36,4 @@ def convert(infile, outfile, format):
         fls += glob.glob(fl)
     fls = list(set(fls))
 
-    read_acq.decode_files(fls, outfile=outfile, write_formats=format)
+    read_acq.decode_files(fls, outfile=outfile, write_formats=[format])
