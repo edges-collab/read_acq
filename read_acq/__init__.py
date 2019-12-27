@@ -17,7 +17,7 @@ try:
 except ImportError:
     HAVE_H5PY = False
 
-__version__ = '0.2.0'
+__version__ = '__version__ = '0.2.0''
 
 cdll = glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so"))[0]
 cdll = ctypes.CDLL(cdll)
