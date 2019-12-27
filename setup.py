@@ -4,9 +4,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 
 import io
-import os
 import re
-# from setuptools import setup
+from setuptools import setup  # Needs to stay here to get the right setup.
 from numpy.distutils.core import setup, Extension
 from os.path import dirname
 from os.path import join
@@ -22,7 +21,6 @@ def read(*names, **kwargs):
 
 setup(
     name='read_acq',
-    version='version='0.2.0'',
     license='MIT license',
     description='Read ACQ file types',
     long_description='%s\n%s' % (
@@ -48,6 +46,8 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: Implementation :: CPython',
     ],
+    setup_requires=['setuptools_scm'],
+    use_scm_version=True,
     install_requires=[
         'numpy',
         'tqdm',
@@ -55,9 +55,6 @@ setup(
         'click'
     ],
     extras_require={
-        'dev': [
-            'bump2version',
-        ],
         'all': [
             'h5py'
         ]
