@@ -269,8 +269,6 @@ def decode_file(
             # Read the spectrum
             spec = _decode_line(data_string.lstrip())
 
-            print(i_time, switch_state, spec[1000:1007])
-
             # Parse ancillary data
             if not switch_state:
                 anc.parse_specline(line_ancillary)
