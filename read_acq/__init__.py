@@ -73,25 +73,6 @@ def convert_thermistor_ohm_to_kelvin(r, partname='TR136_170'):
     return 1 / (a[0] + a[1] * np.log(r) + a[2] * np.log(r) ** 3)
 
 
-def _get_tcal(fname, tcal=None):
-    if tcal is None:
-        dr = os.path.join(os.path.dirname(fname), path.pardir, "Resistance")
-        try:
-            tcal = glob.glob(os.path.join(dr, "*.csv"))[0]
-        except IndexError:
-            raise ValueError("tcal not given, and no relevant tcal file found at ../Restistance/")
-
-    if type(tcal) == str:
-        tcal = Path(tcal)
-
-    if isinstance(tcal, Path):
-        data = np.genfromtxt(tcal, usecols=3, delimiter=',')
-        tcal = np.mean(data[len(data) // 20:])
-        tcal = convert_thermistor_ohm_to_kelvin(tcal)
-
-    return tcal
-
-
 class Ancillary:
     """Represents ancillary data of a file"""
     header_char = ";"
@@ -228,7 +209,7 @@ class Ancillary:
             return [line[0]] + line[2:]
 
 
-def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
+def decode_file(fname, outfile=None, write_formats=None,
                 progress=True, ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -252,16 +233,18 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
     progress: bool, optional
         Whether to display a progress bar for the read.
     """
-    tcal = _get_tcal(fname, tcal)
-
     for fmt in write_formats:
         if fmt not in writers._WRITERS:
             raise ValueError("The format {} does not have an associated writer.".format(fmt))
 
     anc = Ancillary(fname)
-    ntimes = anc.size
+    n_times = anc.size
 
-    p = [np.empty((ntimes, anc.meta['nfreq']))] * 3
+    p = [
+            np.empty((n_times, anc.meta['nfreq'])),
+            np.empty((n_times, anc.meta['nfreq'])),
+            np.empty((n_times, anc.meta['nfreq']))
+    ]
 
     i = 0
     with open(fname, 'r') as fl:
@@ -273,7 +256,7 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
             i_time = i // 3
 
             # Break when we hit the last "2" switch state (there may be a dangling 0 and 1)
-            if i_time == ntimes:
+            if i_time == n_times:
                 break
 
             if not line.strip() or line[0] in "*;":  # Empty line.
@@ -292,29 +275,21 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
             # Read the spectrum
             spec = _decode_line(data_string.lstrip())
 
+            print(i_time, switch_state, spec[1000:1007])
+
             # Parse ancillary data
             if not switch_state:
                 anc.parse_specline(line_ancillary)
 
-            # Check the switch state and act accordingly
+            # Save current spectrum into p at the right switch state
             p[switch_state][i_time] = spec
 
-            # Move on unless switch is 2.
-            if switch_state < 2:
-                continue
-
-            # Check for consistency of data.
-            if not len(set([len(xx) for xx in p])) == 1:
-                # p are different lengths!
-                raise Exception('Error: Failed to calibrate.')
-
-            i_time += 1
             i += 1
 
     # Get antenna temperature
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        ant_temp = (p[0] - p[1]) / (p[2] - p[1]) * tcal + tload
+        Q = (p[0] - p[1]) / (p[2] - p[1])
 
     if write_formats is None:
         write_formats = ['mat']
@@ -323,13 +298,13 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
         getattr(writers, '_write_%s' % fmt)(
             outfile=outfile or fname,
             ancillary=anc.meta,
-            ant_temp=ant_temp.T,
+            ant_temp=Q.T,
             time_data=anc.data,
             freqs=anc.frequencies,
             **{'p{}'.format(i): p[i].T for i in range(3)},
         )
 
-    return ant_temp, p
+    return Q, p
 
 
 def decode_files(files, *args, **kwargs):
