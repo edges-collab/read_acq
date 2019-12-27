@@ -292,7 +292,7 @@ def decode_file(
         getattr(writers, "_write_%s" % fmt)(
             outfile=outfile or fname,
             ancillary=anc.meta,
-            ant_temp=Q.T,
+            Qratio=Q.T,
             time_data=anc.data,
             freqs=anc.frequencies,
             **{"p{}".format(i): p[i].T for i in range(3)},
