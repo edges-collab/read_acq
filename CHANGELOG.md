@@ -1,5 +1,10 @@
 # Changelog
 
+# 0.3.1
+
+## Fixed
+- Error reading fastspec header due to first VERSION line.
+
 # 0.3.0 [27.Dec.2019]
 
 ## Added
