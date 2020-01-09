@@ -65,9 +65,12 @@ class Ancillary:
     _splits = re.compile(r"[\d\.:]+")
 
     def __init__(self, fname):
+        self.fastspec_version = self._get_fastspec_version(fname)
+
         self.check_file(fname)
 
         self.size, nlines = self.get_ntimes(fname)
+
         self.meta = self.read_metadata(fname)
 
         self.meta["n_file_lines"] = nlines
@@ -87,6 +90,14 @@ class Ancillary:
                 "The format of the ACQ file is incorrect: should start with swpos = 0"
             )
 
+    def _get_fastspec_version(self, fname):
+        with open(fname) as fl:
+            first_line = fl.readline()
+        if first_line.startswith(self.header_char):
+            return first_line.split("FASTSPEC")[-1]
+        else:
+            return None
+
     def _read_header(self, fname):
         out = {}
 
@@ -94,10 +105,19 @@ class Ancillary:
         type_order = [int, float, str]
 
         with open(fname) as fl:
+
             for line in fl.readlines():
+
                 if not line.startswith(self.header_char):
                     break
-                name, val = line.split(":")
+                if line.startswith("; FASTSPEC"):
+                    continue
+
+                try:
+                    name, val = line.split(":")
+                except ValueError:
+                    print(fname, line)
+                    raise
                 name = name_pattern.findall(name)[0]
                 for tp in type_order:
                     try:
@@ -117,15 +137,17 @@ class Ancillary:
                 cline = fl.readline()
             dateline = fl.readline()
 
-        cline = self._splits.findall(cline)
+        clines = self._splits.findall(cline)
         dateline = self._splits.findall(dateline)
 
         out.update(
             {
-                "resolution": float(cline[1]),
-                "temperature": float(cline[4]),
-                "nblk": int(cline[5]),
-                "nfreq": int(cline[6]),
+                "data_drops"
+                if "data_drops" in clines
+                else "resolution": float(clines[1]),
+                "temperature": float(clines[4]),
+                "nblk": int(clines[5]),
+                "nfreq": int(clines[6]),
                 "freq_min": float(dateline[2]),
                 "freq_max": float(dateline[4]),
                 "freq_res": float(dateline[3]),
