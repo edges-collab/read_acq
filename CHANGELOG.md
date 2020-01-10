@@ -1,5 +1,25 @@
 # Changelog
 
+# 0.3.1
+
+## Fixed
+- Error reading fastspec header due to first VERSION line.
+
+# 0.3.0 [27.Dec.2019]
+
+## Added
+- Ability to read in new fastspec header
+- New format: npz
+- Ability to save all metadata
+
+## Changed
+- Structure of the code is now class-based and extendible
+- **No longer outputs uncalibrated temperature, but rather the dimensionless ratio, Q**
+
+## Fixed
+- Line-incrementing problem when reading
+
+
 # 0.2.0
 
 ## Added

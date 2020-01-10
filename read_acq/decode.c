@@ -3,9 +3,9 @@
  * decode.c     Decodes the EDGES raw spectrum into double.
  *
  *
- * This is a MEX-file for MATLAB.  
+ * This is a MEX-file for MATLAB.
  *
- *=================================================================*/ 
+ *=================================================================*/
 
 
 #include <math.h>
@@ -153,6 +153,3 @@ int decode(char *contents, double *out){
 //    /* Free the input data copy */
 //    mxFree(pEncoded);
 //}
-
-
-

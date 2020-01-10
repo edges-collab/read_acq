@@ -3,12 +3,18 @@ import glob
 import os
 import re
 import warnings
-from os import path
 from pathlib import Path
 
 import numpy as np
 import tqdm
 from . import writers
+from pkg_resources import get_distribution, DistributionNotFound
+
+try:
+    __version__ = get_distribution(__name__).version
+except DistributionNotFound:
+    # package is not installed
+    pass
 
 try:
     import h5py
@@ -17,9 +23,10 @@ try:
 except ImportError:
     HAVE_H5PY = False
 
-__version__ = '0.2.0'
 
-cdll = glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so"))[0]
+cdll = glob.glob(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so")
+)[0]
 cdll = ctypes.CDLL(cdll)
 
 
@@ -49,84 +56,47 @@ def _decode_line(line):
     return out
 
 
-PART_COEFFS = {
-    'TR136_170': (1.03514e-3, 2.33825e-4, 7.92467e-8),
-}
-
-
-def convert_thermistor_ohm_to_kelvin(r, partname='TR136_170'):
-    """
-    Convert thermistor resistance to temperature
-
-    Parameters
-    ----------
-    r : float
-        Resistance
-    partname: str, optional
-        The name of the thermistor product. Must exist in `PART_COEFFS`
-
-    Returns
-    -------
-    float: temperature in K.
-    """
-    a = PART_COEFFS[partname]
-    return 1 / (a[0] + a[1] * np.log(r) + a[2] * np.log(r) ** 3)
-
-
-def _get_tcal(fname, tcal=None):
-    if tcal is None:
-        dr = os.path.join(os.path.dirname(fname), path.pardir, "Resistance")
-        try:
-            tcal = glob.glob(os.path.join(dr, "*.csv"))[0]
-        except IndexError:
-            raise ValueError("tcal not given, and no relevant tcal file found at ../Restistance/")
-
-    if type(tcal) == str:
-        tcal = Path(tcal)
-
-    if isinstance(tcal, Path):
-        data = np.genfromtxt(tcal, usecols=3, delimiter=',')
-        if np.average(data)>55 and np.average(data)<45:
-            tcal=350
-        else:
-            tcal = np.mean(data[len(data) // 20:])
-            tcal = convert_thermistor_ohm_to_kelvin(tcal)
-        #default should be 300 if data is between 45 and 55
-
-    return tcal
-
-
 class Ancillary:
     """Represents ancillary data of a file"""
+
     header_char = ";"
-    DTYPE = np.dtype([
-        ('adcmax', np.float32),
-        ('adcmin', np.float32),
-        ("time", "S17"),
-    ])
+    DTYPE = np.dtype([("adcmax", np.float32), ("adcmin", np.float32), ("time", "S17"),])
 
     _splits = re.compile(r"[\d\.:]+")
 
     def __init__(self, fname):
+        self.fastspec_version = self._get_fastspec_version(fname)
+
         self.check_file(fname)
 
         self.size, nlines = self.get_ntimes(fname)
+
         self.meta = self.read_metadata(fname)
 
-        self.meta['n_file_lines'] = nlines
+        self.meta["n_file_lines"] = nlines
 
         self.data = np.zeros(self.size, dtype=self.DTYPE)
         self._current_size = 0
 
     def check_file(self, fname):
         with open(fname) as fl:
-            cline = ''
-            while not cline.startswith('#'):
+            cline = ""
+            while not cline.startswith("#"):
                 cline = fl.readline()
 
         cline = self._splits.findall(cline)
         if int(cline[0]) != 0:
-            raise IOError("The format of the ACQ file is incorrect: should start with swpos = 0")
+            raise IOError(
+                "The format of the ACQ file is incorrect: should start with swpos = 0"
+            )
+
+    def _get_fastspec_version(self, fname):
+        with open(fname) as fl:
+            first_line = fl.readline()
+        if first_line.startswith(self.header_char):
+            return first_line.split("FASTSPEC")[-1]
+        else:
+            return None
 
     def _read_header(self, fname):
         out = {}
@@ -135,10 +105,19 @@ class Ancillary:
         type_order = [int, float, str]
 
         with open(fname) as fl:
+
             for line in fl.readlines():
+
                 if not line.startswith(self.header_char):
                     break
-                name, val = line.split(":")
+                if line.startswith("; FASTSPEC"):
+                    continue
+
+                try:
+                    name, val = line.split(":")
+                except ValueError:
+                    print(fname, line)
+                    raise
                 name = name_pattern.findall(name)[0]
                 for tp in type_order:
                     try:
@@ -153,30 +132,34 @@ class Ancillary:
         out = self._read_header(fname)
 
         with open(fname) as fl:
-            cline = ''
+            cline = ""
             while not cline.startswith("#"):
                 cline = fl.readline()
             dateline = fl.readline()
 
-        cline = self._splits.findall(cline)
+        clines = self._splits.findall(cline)
         dateline = self._splits.findall(dateline)
 
         out.update(
             {
-                "resolution": float(cline[1]),
-                "temperature": float(cline[4]),
-                'nblk': int(cline[5]),
-                'nfreq': int(cline[6]),
-                'freq_min': float(dateline[2]),
-                'freq_max': float(dateline[4]),
-                'freq_res': float(dateline[3])
+                "data_drops"
+                if "data_drops" in clines
+                else "resolution": float(clines[1]),
+                "temperature": float(clines[4]),
+                "nblk": int(clines[5]),
+                "nfreq": int(clines[6]),
+                "freq_min": float(dateline[2]),
+                "freq_max": float(dateline[4]),
+                "freq_res": float(dateline[3]),
             }
         )
         return out
 
     @property
     def frequencies(self):
-        return np.linspace(self.meta['freq_min'], self.meta['freq_max'], self.meta['nfreq'])
+        return np.linspace(
+            self.meta["freq_min"], self.meta["freq_max"], self.meta["nfreq"]
+        )
 
     def __getitem__(self, item):
         try:
@@ -184,15 +167,15 @@ class Ancillary:
             return self.data[int(item)]
         except ValueError:
             # try it as a time
-            return self.data[self.data['time'] == item]
+            return self.data[self.data["time"] == item]
 
     def get_ntimes(self, fname):
         # count lines
         ntimes = 0
-        with open(fname, 'r') as fl:
+        with open(fname, "r") as fl:
             nlines = 0
             for line in fl.readlines():
-                if line[0] not in '#*;' and line:
+                if line[0] not in "#*;" and line:
                     ntimes += 1
                 nlines += 1
         return ntimes // 3, nlines
@@ -214,8 +197,8 @@ class Ancillary:
         line = self._splits.findall(line)
 
         if add_to_self:
-            self.data[self._current_size]['adcmax'] = line[2]
-            self.data[self._current_size]['adcmin'] = line[3]
+            self.data[self._current_size]["adcmax"] = line[2]
+            self.data[self._current_size]["adcmin"] = line[3]
         else:
             return {"adcmax": float(line[2]), "admin": float(line[3])}
 
@@ -226,14 +209,15 @@ class Ancillary:
         line = self._splits.findall(line)
 
         if add_to_self:
-            self.data[self._current_size]['time'] = line[0]
+            self.data[self._current_size]["time"] = line[0]
             self._current_size += 1
         else:
             return [line[0]] + line[2:]
 
 
-def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
-                progress=True, ):
+def decode_file(
+    fname, outfile=None, write_formats=None, progress=True,
+):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
 
@@ -256,28 +240,35 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
     progress: bool, optional
         Whether to display a progress bar for the read.
     """
-    tcal = _get_tcal(fname, tcal)
-
     for fmt in write_formats:
         if fmt not in writers._WRITERS:
-            raise ValueError("The format {} does not have an associated writer.".format(fmt))
+            raise ValueError(
+                "The format {} does not have an associated writer.".format(fmt)
+            )
 
     anc = Ancillary(fname)
-    ntimes = anc.size
+    n_times = anc.size
 
-    p = [np.empty((ntimes, anc.meta['nfreq']))] * 3
+    p = [
+        np.empty((n_times, anc.meta["nfreq"])),
+        np.empty((n_times, anc.meta["nfreq"])),
+        np.empty((n_times, anc.meta["nfreq"])),
+    ]
 
     i = 0
-    with open(fname, 'r') as fl:
+    with open(fname, "r") as fl:
         for line in tqdm.tqdm(
-                fl.readlines(), disable=not progress, total=anc.meta['n_file_lines'],
-                desc="Reading {}".format(fname), unit='lines'
+            fl.readlines(),
+            disable=not progress,
+            total=anc.meta["n_file_lines"],
+            desc="Reading {}".format(fname),
+            unit="lines",
         ):
             switch_state = i % 3
             i_time = i // 3
 
             # Break when we hit the last "2" switch state (there may be a dangling 0 and 1)
-            if i_time == ntimes:
+            if i_time == n_times:
                 break
 
             if not line.strip() or line[0] in "*;":  # Empty line.
@@ -291,7 +282,11 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
                 line_ancillary, data_string = line.split("spectrum")
             except ValueError:
                 # Uh-oh, we probably have an incomplete file.
-                raise Exception('Formatting of ACQ file is incorrect on line starting\n{}'.format(line[:50]))
+                raise Exception(
+                    "Formatting of ACQ file is incorrect on line starting\n{}".format(
+                        line[:50]
+                    )
+                )
 
             # Read the spectrum
             spec = _decode_line(data_string.lstrip())
@@ -300,43 +295,35 @@ def decode_file(fname, tcal=400, tload=300, outfile=None, write_formats=None,
             if not switch_state:
                 anc.parse_specline(line_ancillary)
 
-            # Check the switch state and act accordingly
+            # Save current spectrum into p at the right switch state
             p[switch_state][i_time] = spec
 
-            # Move on unless switch is 2.
-            if switch_state < 2:
-                continue
-
-            # Check for consistency of data.
-            if not len(set([len(xx) for xx in p])) == 1:
-                # p are different lengths!
-                raise Exception('Error: Failed to calibrate.')
-
-            i_time += 1
             i += 1
 
     # Get antenna temperature
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        ant_temp = (p[0] - p[1]) / (p[2] - p[1]) * tcal + tload
+        Q = (p[0] - p[1]) / (p[2] - p[1])
 
     if write_formats is None:
-        write_formats = ['mat']
+        write_formats = ["mat"]
 
     for fmt in write_formats:
-        getattr(writers, '_write_%s' % fmt)(
+        getattr(writers, "_write_%s" % fmt)(
             outfile=outfile or fname,
             ancillary=anc.meta,
-            ant_temp=ant_temp.T,
+            Qratio=Q.T,
             time_data=anc.data,
             freqs=anc.frequencies,
-            **{'p{}'.format(i): p[i].T for i in range(3)},
+            **{"p{}".format(i): p[i].T for i in range(3)},
         )
 
-    return ant_temp, p
+    return Q, p
 
 
 def decode_files(files, *args, **kwargs):
     """Call :func:`decode_file` on a list of files."""
-    for fl in tqdm.tqdm(files, disable=len(files) < 5, desc="Processing files", unit='files'):
+    for fl in tqdm.tqdm(
+        files, disable=len(files) < 5, desc="Processing files", unit="files"
+    ):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
