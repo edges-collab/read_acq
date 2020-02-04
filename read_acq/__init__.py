@@ -303,7 +303,12 @@ def decode_file(
     # Get antenna temperature
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
+        # BUG: This line divides by zero for many elements, resulting in NaN elements, while p[i] has zeroes
         Q = (p[0] - p[1]) / (p[2] - p[1])
+    Qmask=np.isnan(Q)
+    Q=np.ma.masked_array(Q, mask=Qmask)
+    for i in range(len(p)):
+        p[i]=np.ma.masked_array(p[i], mask=Qmask)
 
     if write_formats is None:
         write_formats = ["mat"]
