@@ -217,7 +217,7 @@ class Ancillary:
 
 def decode_file(
     fname, outfile=None, write_formats=None, progress=True,
-meta=False):
+        meta=False):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
 
@@ -319,8 +319,8 @@ meta=False):
             freqs=anc.frequencies,
             **{"p{}".format(i): p[i].T for i in range(3)},
         )
-    
-    if meta==True:
+
+    if meta:
         return Q, p, anc.meta
     else:
         return Q, p
