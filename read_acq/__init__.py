@@ -317,11 +317,13 @@ def decode_file(
             Qratio=Q.T,
             time_data=anc.data,
             freqs=anc.frequencies,
+            fastspec_version=anc.fastspec_version,
+            size=anc.size,
             **{"p{}".format(i): p[i].T for i in range(3)},
         )
 
     if meta:
-        return Q, p, anc.meta
+        return Q, p, anc
     else:
         return Q, p
 
