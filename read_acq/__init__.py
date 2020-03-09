@@ -217,7 +217,7 @@ class Ancillary:
 
 def decode_file(
     fname, outfile=None, write_formats=None, progress=True,
-):
+        meta=False):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
 
@@ -239,6 +239,8 @@ def decode_file(
         Can contain any of 'mat' and 'npz'.
     progress: bool, optional
         Whether to display a progress bar for the read.
+    meta: bool, optional
+        Whether to output metadata for the read.
     """
     for fmt in write_formats:
         if fmt not in writers._WRITERS:
@@ -315,10 +317,15 @@ def decode_file(
             Qratio=Q.T,
             time_data=anc.data,
             freqs=anc.frequencies,
+            fastspec_version=anc.fastspec_version,
+            size=anc.size,
             **{"p{}".format(i): p[i].T for i in range(3)},
         )
 
-    return Q, p
+    if meta:
+        return Q, p, anc
+    else:
+        return Q, p
 
 
 def decode_files(files, *args, **kwargs):
