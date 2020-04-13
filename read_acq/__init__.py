@@ -216,7 +216,12 @@ class Ancillary:
 
 
 def decode_file(
-    fname, outfile=None, write_formats=None, progress=True, meta=False,
+    fname,
+    outfile=None,
+    write_formats=None,
+    progress=True,
+    meta=False,
+    leave_progress=True,
 ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -265,6 +270,7 @@ def decode_file(
             total=anc.meta["n_file_lines"],
             desc="Reading {}".format(Path(fname).name),
             unit="lines",
+            leave=leave_progress,
         ):
             switch_state = i % 3
             i_time = i // 3
