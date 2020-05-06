@@ -309,7 +309,9 @@ def decode_files(files, *args, **kwargs):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
 
 
-def encode(filename: [str, Path], p: List[np.ndarray], ancillary: Ancillary):
+def encode(
+    filename: [str, Path], p: List[np.ndarray], meta: dict, ancillary: np.ndarray
+):
     """
     Encode raw powers and ancillary data as an ACQ file.
 
@@ -320,31 +322,34 @@ def encode(filename: [str, Path], p: List[np.ndarray], ancillary: Ancillary):
     p : list of ndarray
         List of three ndarrays, one for each switch. Each array should be 2D, shape
         Ntimes x Nfreq.
-    ancillary : :class:`Ancillary` object
-        Dictionary of ancillary information.
+    meta : dict
+        Dictionary of metadata associated with the file, to be written to the header
+        and preambles.
+    ancillary : structured array
+        Time-dependent ancillary information, such as times and adcmin/adcmax.
     """
 
     with open(filename, "w") as fl:
         # Write the header
-        for k, v in ancillary.meta.items():
+        for k, v in meta.items():
             fl.write(f";--{k}: {v}\n")
 
         # Go through each time
         for i in range(len(p[0])):
-            for switch, pp in enumerate(p[i]):
+            for switch, pp in enumerate(p[:, i]):
                 fl.write(
-                    f"# swpos {switch} data_drops\t{ancillary.meta['data_drops']} "
-                    f"adcmax  {ancillary.data[i]['adcmax']} "
-                    f"adcmin {ancillary.data[i]['adcmin']} "
-                    f"temp  {ancillary.meta['temp']} C "
-                    f"nblk {ancillary.meta['nblk']} "
-                    f"nspec {ancillary.meta['nfreq']}\n"
+                    f"# swpos {switch} data_drops\t{meta['data_drops']} "
+                    f"adcmax  {ancillary['adcmax'][i]} "
+                    f"adcmin {ancillary['adcmin'][i]} "
+                    f"temp  {meta['temp']} C "
+                    f"nblk {meta['nblk']} "
+                    f"nspec {meta['nfreq']}\n"
                 )
 
                 fl.write(
-                    f"{ancillary.data[i]['time']} {switch}\t{ancillary.meta['freq_min']}  "
-                    f"{ancillary.meta['freq_res']}  {ancillary.meta['freq_max']}  "
+                    f"{ancillary['time'][i]} {switch}\t{meta['freq_min']}  "
+                    f"{meta['freq_res']}  {meta['freq_max']}  "
                     f"0.3 spectrum "
                 )
 
-                fl.write(_encode_line(pp, ancillary.meta["nblk"]))
+                fl.write(_encode_line(pp, meta["nblk"]))

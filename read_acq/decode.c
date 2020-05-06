@@ -49,7 +49,6 @@ static void initDecodeTable()
 static void initEncodeTable()
 {
     int i;
-    printf("Encoding table init...\n");
 
     // Define the encoding lookup table
     for (i = 0; i < 26; i++) {
@@ -65,7 +64,6 @@ static void initEncodeTable()
     encode_table[63] = '/';
 
     encode_lookup_inited=1;
-    printf("done...\n");
 }
 
 
