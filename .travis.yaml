@@ -1,0 +1,32 @@
+# Config file for automatic testing at travis-ci.org
+dist: xenial
+language: python
+python:
+  - 3.8
+  - 3.7
+  - 3.6
+
+jobs:
+  include:
+    - python: 3.7
+      env: TOXENV=lint
+
+env:
+  global:
+    - COVERALLS_PARALLEL=true
+
+# command to install dependencies, e.g. pip install -r requirements.txt --use-mirrors
+install:
+  - pip install -U tox-travis coverage coveralls
+  - pip install .[dev]
+  - pre-commit install
+
+# command to run tests, e.g. python setup.py test
+script:
+  - pytest --durations
+  - pre-commit run -a
+
+# Calculate coverage
+after_success:
+  - ls -a
+  - coveralls
