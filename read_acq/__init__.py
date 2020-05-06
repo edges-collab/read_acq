@@ -1,9 +1,8 @@
-import ctypes
-import glob
-import os
 import re
 import warnings
 from pathlib import Path
+from typing import List
+from .codec import _encode_line, _decode_line
 
 import numpy as np
 import tqdm
@@ -22,38 +21,6 @@ try:
     HAVE_H5PY = True
 except ImportError:
     HAVE_H5PY = False
-
-
-cdll = glob.glob(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so")
-)[0]
-cdll = ctypes.CDLL(cdll)
-
-
-def _decode_line(line):
-    """
-    Decode a pre-parsed line of an ACQ file.
-
-    This is a very thin wrapper around the C `decode` function which does the same.
-
-    :param line: the string line of the file, pre-parsed.
-    :return: 1D-array of decoded values.
-    """
-    fnc = cdll.decode
-    fnc.restype = ctypes.c_int
-    fnc.argtypes = [
-        ctypes.c_char_p,
-        np.ctypeslib.ndpointer(np.float64),
-    ]
-
-    out = np.zeros(len(line) // 4)
-
-    res = fnc(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out))
-
-    if res:
-        raise Exception("C decoder exited with an error!")
-
-    return out
 
 
 class Ancillary:
@@ -340,3 +307,44 @@ def decode_files(files, *args, **kwargs):
         files, disable=len(files) < 5, desc="Processing files", unit="files"
     ):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
+
+
+def encode(filename: [str, Path], p: List[np.ndarray], ancillary: Ancillary):
+    """
+    Encode raw powers and ancillary data as an ACQ file.
+
+    Parameters
+    ----------
+    filename : path
+        Path to output file to write.
+    p : list of ndarray
+        List of three ndarrays, one for each switch. Each array should be 2D, shape
+        Ntimes x Nfreq.
+    ancillary : :class:`Ancillary` object
+        Dictionary of ancillary information.
+    """
+
+    with open(filename, "w") as fl:
+        # Write the header
+        for k, v in ancillary.meta.items():
+            fl.write(f";--{k}: {v}\n")
+
+        # Go through each time
+        for i in range(len(p[0])):
+            for switch, pp in enumerate(p[i]):
+                fl.write(
+                    f"# swpos {switch} data_drops\t{ancillary.meta['data_drops']} "
+                    f"adcmax  {ancillary.data[i]['adcmax']} "
+                    f"adcmin {ancillary.data[i]['adcmin']} "
+                    f"temp  {ancillary.meta['temp']} C "
+                    f"nblk {ancillary.meta['nblk']} "
+                    f"nspec {ancillary.meta['nfreq']}\n"
+                )
+
+                fl.write(
+                    f"{ancillary.data[i]['time']} {switch}\t{ancillary.meta['freq_min']}  "
+                    f"{ancillary.meta['freq_res']}  {ancillary.meta['freq_max']}  "
+                    f"0.3 spectrum "
+                )
+
+                fl.write(_encode_line(pp, ancillary.meta["nblk"]))
