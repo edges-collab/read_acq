@@ -2,6 +2,7 @@ from os import path
 import numpy as np
 from scipy import io
 import copy
+from edges_io.h5 import HDF5RawSpectrum
 
 try:
     import h5py
@@ -40,16 +41,30 @@ def _get_fname(outfile=None, format=None):
 
 @writer
 def _write_h5(outfile=None, ancillary=None, **data):
+    """Writes HDF5 file exactly as FastSpec should now write it out."""
     if not HAVE_H5PY:
         raise RuntimeError("You need the h5py library to write to HDF5 format!")
 
-    with h5py.File(outfile, "w") as fl:
-        if ancillary:
-            for k, v in ancillary.items():
-                fl.attrs[k] = v
+    spectra = {
+        "Q": data["Qratio"],
+        "p0": data["p0"],
+        "p1": data["p1"],
+        "p2": data["p2"],
+    }
+    meta = ancillary.update(fastspec_version=data["fastspec_version"])
+    freq_anc = {"frequencies": data["freqs"]}
+    time_anc = {name: data["time_data"][name] for name in data["time_data"].dtype.names}
 
-        for k, v in data.items():
-            fl[k] = v
+    obj = HDF5RawSpectrum.from_data(
+        {
+            "spectra": spectra,
+            "meta": meta,
+            "freq_ancillary": freq_anc,
+            "time_ancillary": time_anc,
+        }
+    )
+
+    obj.write(outfile)
 
 
 @writer
