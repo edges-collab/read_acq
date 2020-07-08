@@ -33,6 +33,7 @@ setup(
     author_email="steven.g.murray@asu.edu",
     url="https://github.com/edges-collab/read_acq",
     packages=find_packages("src"),
+    package_dir={"": "src"},
     include_package_data=True,
     zip_safe=False,
     classifiers=[
