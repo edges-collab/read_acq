@@ -1,4 +1,4 @@
-name: Tests
+name: Downstream Tests
 
 # Test on all pushes, except when the push is literally just a tag (because we
 # tag automatically via CI, and therefore there's no extra code in that push).
@@ -12,18 +12,16 @@ on:
       - 'master'
 
 jobs:
-  tests:
+  downstream:
     env:
-      ENV_NAME: tests
-      PYTHON: ${{ matrix.python-version }}
-      OS: ${{ matrix.os }}
+      PYTHON: 3.8
+      OS: ubuntu-latest
     name: Testing
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: [3.6, 3.7, 3.8]
+        package: ['edges-io', 'edges-cal']
+      fail-fast: false
     steps:
       - uses: actions/checkout@master
         with:
@@ -35,11 +33,13 @@ jobs:
         run: |
           pip install -U coverage
           pip install .[dev]
+      - name: Get downstream package
+        run: |
+          cd ..
+          git clone https://github.com/edges-collab/${{ matrix.package }}
+          cd ${{ matrix.package }}
+          pip install .[dev]
       - name: Run Tests
         run: |
-          python -m pytest --cov=read_acq --cov-config=.coveragerc --cov-report xml:./coverage.xml --durations=25
-      - uses: codecov/codecov-action@master
-        if: matrix.os == 'ubuntu-latest' && success()
-        with:
-          token: ${{secrets.CODECOV_TOKEN}} #required
-          file: ./coverage.xml #optional
+          cd ../${{ matrix.package }}
+          python -m pytest
