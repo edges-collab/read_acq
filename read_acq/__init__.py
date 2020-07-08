@@ -86,18 +86,19 @@ class Ancillary:
 
                 if not line.startswith(self.header_char):
                     break
+
                 if line.startswith("; FASTSPEC"):
-                    continue
+                    name = "fastspec_version"
+                    val = line.split()[-1]
+                else:
+                    try:
+                        name, val = line.split(": ")
+                    except ValueError:
+                        warnings.warn(f"In file {fname}, item {line} has no value")
+                        name = line.split(":")[0]
+                        val = ""
 
-                try:
-                    name, val = line.split(": ")
-                except ValueError:
-                    print(fname, line)
-                    raise
-                name = name_pattern.findall(name)[0]
-
-                if name == "FASTSPEC":
-                    name = "fastsec_version"
+                    name = name_pattern.findall(name)[0]
 
                 for tp in type_order:
                     try:
@@ -110,6 +111,7 @@ class Ancillary:
                             pass
                     except ValueError:
                         pass
+
         return out
 
     def read_metadata(self, fname):
@@ -144,14 +146,6 @@ class Ancillary:
         return np.linspace(
             self.meta["freq_min"], self.meta["freq_max"], self.meta["nfreq"]
         )
-
-    def __getitem__(self, item):
-        try:
-            # treat it as an int
-            return self.data[int(item)]
-        except ValueError:
-            # try it as a time
-            return self.data[self.data["times"] == item]
 
     def get_ntimes(self, fname):
         # count lines
