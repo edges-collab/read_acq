@@ -54,7 +54,7 @@ setup(
     extras_require={
         "dev": [
             "pre-commit",
-            "pytest",
+            "pytest>=5<6",
             "pytest-cov",
             "edges-io @ git+git://github.com/edges-collab/edges-io.git",
         ],
