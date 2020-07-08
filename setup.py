@@ -51,7 +51,15 @@ setup(
     setup_requires=["setuptools_scm"],
     use_scm_version=True,
     install_requires=["numpy", "tqdm", "scipy", "click"],
-    extras_require={"dev": ["pre-commit", "pytest", "pytest-cov"], "all": ["h5py"]},
+    extras_require={
+        "dev": [
+            "pre-commit",
+            "pytest",
+            "pytest-cov",
+            "edges-io @ git+git://github.com/edges-collab/edges-io.git",
+        ],
+        "all": ["h5py"],
+    },
     ext_modules=[
         Extension(
             "read_acq.decode",
