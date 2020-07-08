@@ -28,7 +28,6 @@ def test_full_file_encode(tmp_path_factory):
         "temp": 0,
         "nblk": 1000,
         "nfreq": 100,
-        "data_drops": 0,
         "freq_min": 0,
         "freq_max": 200,
         "freq_res": 2,
@@ -36,10 +35,12 @@ def test_full_file_encode(tmp_path_factory):
 
     fname = tmp_path_factory.mktemp("direc") / "tempfile.acq"
 
-    ancillary = np.array(
-        [(0.2, 0.3, "time")] * 5,
-        dtype=[("adcmin", float), ("adcmax", float), ("time", "U3")],
-    )
+    ancillary = {
+        "adcmin": np.ones((10, 3)) * 0.2,
+        "adcmax": np.ones((10, 3)) * 0.3,
+        "data_drops": np.zeros((10, 3), dtype=int),
+        "time": np.array(["time"] * 10),
+    }
 
     encode(fname, data, meta, ancillary)
 

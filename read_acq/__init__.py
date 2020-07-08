@@ -352,7 +352,7 @@ def encode(
         for i in range(len(p[0])):
             for switch, pp in enumerate(p[:, i]):
                 fl.write(
-                    f"# swpos {switch} data_drops\t{meta['data_drops'][i, switch]} "
+                    f"# swpos {switch} data_drops\t{ancillary['data_drops'][i, switch]} "
                     f"adcmax  {ancillary['adcmax'][i, switch]} "
                     f"adcmin {ancillary['adcmin'][i, switch]} "
                     f"temp  {meta['temp']} C "
