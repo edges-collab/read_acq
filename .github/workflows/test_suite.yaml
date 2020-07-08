@@ -18,7 +18,6 @@ jobs:
       PYTHON: ${{ matrix.python-version }}
       OS: ${{ matrix.os }}
     name: Testing
-    #    needs: [linter]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -44,3 +43,35 @@ jobs:
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
           file: ./coverage.xml #optional
+
+  downstream:
+    env:
+      PYTHON: 3.8
+      OS: ubuntu-latest
+    name: Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ['edges-io', 'edges-cal']
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@master
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v1
+      - name: set PY
+        run: echo "::set-env name=PY::$(python -c 'import hashlib, sys;print(hashlib.sha256(sys.version.encode()+sys.executable.encode()).hexdigest())')"
+      - name: Setup Environment
+        run: |
+          pip install -U coverage
+          pip install .[dev]
+      - name: Get edges-io
+        run: |
+          cd ..
+          git clone https://github.com/edges-collab/${{ matrix.package }}
+          cd ${{ matrix.package }}
+          pip install .[dev]
+      - name: Run Tests
+        run: |
+          cd ../${{ matrix.package }}
+          python -m pytest
