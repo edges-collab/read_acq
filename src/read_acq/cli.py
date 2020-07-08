@@ -13,7 +13,7 @@ import glob
 
 import click
 
-from src import read_acq
+from . import decode_files
 
 main = click.Group()
 
@@ -38,4 +38,4 @@ def convert(infile, outfile, format):
         fls += glob.glob(fl)
     fls = list(set(fls))
 
-    read_acq.decode_files(fls, outfile=outfile, write_formats=format)
+    decode_files(fls, outfile=outfile, write_formats=format)

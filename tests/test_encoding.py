@@ -1,5 +1,5 @@
-from src.read_acq.codec import _encode_line, _decode_line, _encode
-from src.read_acq import encode
+from read_acq.codec import _encode_line, _decode_line, _encode
+from read_acq import encode
 
 import numpy as np
 
