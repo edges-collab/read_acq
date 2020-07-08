@@ -13,7 +13,7 @@ import glob
 
 import click
 
-import read_acq
+from src import read_acq
 
 main = click.Group()
 

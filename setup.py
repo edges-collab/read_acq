@@ -32,7 +32,7 @@ setup(
     author="EDGES Collaboration",
     author_email="steven.g.murray@asu.edu",
     url="https://github.com/edges-collab/read_acq",
-    packages=find_packages(),
+    packages=find_packages("src"),
     include_package_data=True,
     zip_safe=False,
     classifiers=[
