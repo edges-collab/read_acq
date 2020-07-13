@@ -7,15 +7,9 @@ from .codec import _encode_line, _decode_line
 import numpy as np
 import tqdm
 from . import writers
-from pkg_resources import get_distribution, DistributionNotFound
 
 from edges_io.h5 import HDF5RawSpectrum
 
-try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
-    # package is not installed
-    pass
 
 try:
     import h5py

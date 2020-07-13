@@ -1,2 +1,2 @@
-graft read_acq
+graft src/read_acq
 prune data

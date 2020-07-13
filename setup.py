@@ -32,7 +32,8 @@ setup(
     author="EDGES Collaboration",
     author_email="steven.g.murray@asu.edu",
     url="https://github.com/edges-collab/read_acq",
-    packages=find_packages(),
+    packages=find_packages("src"),
+    package_dir={"": "src"},
     include_package_data=True,
     zip_safe=False,
     classifiers=[
@@ -46,6 +47,7 @@ setup(
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
     setup_requires=["setuptools_scm"],
@@ -63,7 +65,7 @@ setup(
     ext_modules=[
         Extension(
             "read_acq.decode",
-            ["read_acq/decode.c"],
+            ["src/read_acq/decode.c"],
             extra_compile_args=["-Ofast", "-Wall"],
             libraries=["m",],
         ),
