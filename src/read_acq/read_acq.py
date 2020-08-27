@@ -44,8 +44,10 @@ class Ancillary:
             "adcmax": np.zeros((self.size, 3), dtype=np.float32),
             "adcmin": np.zeros((self.size, 3), dtype=np.float32),
             "times": np.zeros(self.size, dtype="S17"),
-            "data_drops": np.zeros((self.size, 3), dtype=int),
         }
+        if "data_drops" in self.meta:
+            self.data["data_drops"] = np.zeros((self.size, 3), dtype=int)
+
         self._current_size = 0
 
     def check_file(self, fname):
@@ -170,15 +172,16 @@ class Ancillary:
 
         if add_to_self:
             swpos = int(line[0])
-            self.data["data_drops"][self._current_size, swpos] = line[1]
+            if "data_drops" in self.data:
+                self.data["data_drops"][self._current_size, swpos] = line[1]
             self.data["adcmax"][self._current_size, swpos] = line[2]
             self.data["adcmin"][self._current_size, swpos] = line[3]
 
         else:
             return {
                 "adcmax": float(line[2]),
-                "admin": float(line[3]),
-                "data_drops": int(line[0]),
+                "adcmin": float(line[3]),
+                "data_drops": int(line[1]),
             }
 
     def parse_specline(self, line, add_to_self=None):
