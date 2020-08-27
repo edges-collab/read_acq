@@ -178,11 +178,13 @@ class Ancillary:
             self.data["adcmin"][self._current_size, swpos] = line[3]
 
         else:
-            return {
+            out = {
                 "adcmax": float(line[2]),
                 "adcmin": float(line[3]),
-                "data_drops": int(line[1]),
             }
+            if "data_drops" in self.data:
+                out["data_drops"] = int(line[1])
+            return out
 
     def parse_specline(self, line, add_to_self=None):
         """Parse an ancillary data line of a file, and return a dict"""
