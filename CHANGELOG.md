@@ -1,5 +1,9 @@
 # Changelog
 
+# 0.3.2
+## Fixed
+- Errors in writing out files (now have tests)
+
 # 0.3.1
 
 ## Fixed

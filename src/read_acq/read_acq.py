@@ -309,9 +309,9 @@ def decode_file(
         )
 
     if meta:
-        return Q, p, anc
+        return Q.T, [pp.T for pp in p], anc
     else:
-        return Q, p
+        return Q, [pp.T for pp in p]
 
 
 def decode_files(files, *args, **kwargs):
