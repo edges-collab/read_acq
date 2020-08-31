@@ -53,7 +53,7 @@ def _write_h5(outfile=None, ancillary=None, **data):
     }
     meta = ancillary.update(fastspec_version=data["fastspec_version"])
     freq_anc = {"frequencies": data["freqs"]}
-    time_anc = {name: data["time_data"][name] for name in data["time_data"].dtype.names}
+    time_anc = {name: data["time_data"][name] for name in data["time_data"]}
 
     obj = HDF5RawSpectrum.from_data(
         {
