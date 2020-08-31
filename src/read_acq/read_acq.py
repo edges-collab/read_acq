@@ -297,21 +297,6 @@ def decode_file(
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         Q = (p[0] - p[1]) / (p[2] - p[1])
 
-    if write_formats is None:
-        write_formats = ["h5"]
-
-    for fmt in write_formats:
-        getattr(writers, "_write_%s" % fmt)(
-            outfile=outfile or fname,
-            ancillary=anc.meta,
-            Qratio=Q.T,
-            time_data=anc.data,
-            freqs=anc.frequencies,
-            fastspec_version=anc.fastspec_version,
-            size=anc.size,
-            **{"p{}".format(i): p[i].T for i in range(3)},
-        )
-
     if meta:
         return Q.T, [pp.T for pp in p], anc
     else:
@@ -324,6 +309,43 @@ def decode_files(files, *args, **kwargs):
         files, disable=len(files) < 5, desc="Processing files", unit="files"
     ):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
+
+
+def convert_file(
+    fname: [str, Path],
+    outfile: [str, None, Path] = None,
+    write_format: str = "h5",
+    **kwargs,
+):
+    """Convert an ACQ file to a different format.
+
+    Parameters
+    ----------
+    fname
+        The filename of the ACQ file to convert.
+    outfile
+        The path to the output file. If None, save to a file of the same name (with
+        different extension) as ``fname``.
+    write_format
+        The format to write to. Options are 'h5', 'mat' and 'npz'.
+
+    Other Parameters
+    ----------------
+    All other parameters passed through to :func:`decode_file`.
+    """
+    kwargs["meta"] = True
+    Q, p, anc = decode_file(fname, **kwargs)
+
+    getattr(writers, f"_write_{write_format}")(
+        outfile=outfile or fname,
+        ancillary=anc.meta,
+        Qratio=Q,
+        time_data=anc.data,
+        freqs=anc.frequencies,
+        fastspec_version=anc.fastspec_version,
+        size=anc.size,
+        **{f"p{i}": p[i] for i in range(3)},
+    )
 
 
 def encode(

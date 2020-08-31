@@ -12,8 +12,9 @@ from __future__ import print_function
 import glob
 
 import click
+import tqdm
 
-from . import decode_files
+from . import convert_file
 
 main = click.Group()
 
@@ -30,11 +31,7 @@ main = click.Group()
     type=click.Path(exists=False, dir_okay=False),
 )
 @click.option(
-    "-f",
-    "--format",
-    default=("mat",),
-    multiple=True,
-    type=click.Choice(["mat", "h5", "npz"]),
+    "-f", "--format", default="h5", type=click.Choice(["h5", "mat", "npz"]),
 )
 def convert(infile, outfile, format):
     fls = []
@@ -42,4 +39,7 @@ def convert(infile, outfile, format):
         fls += glob.glob(fl)
     fls = list(set(fls))
 
-    decode_files(fls, outfile=outfile, write_formats=format)
+    for fl in tqdm.tqdm(
+        fls, disable=len(fls) < 5, desc="Processing files", unit="files"
+    ):
+        convert_file(fl, outfile=outfile, write_format=format)
