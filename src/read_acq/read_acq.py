@@ -24,7 +24,11 @@ class Ancillary:
 
     header_char = ";"
     DTYPE = np.dtype(
-        [("adcmax", np.float32), ("adcmin", np.float32), ("times", "S17"),]
+        [
+            ("adcmax", np.float32),
+            ("adcmin", np.float32),
+            ("times", "S17"),
+        ]
     )
 
     _splits = re.compile(r"[\d\.:]+")
