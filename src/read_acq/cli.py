@@ -31,7 +31,10 @@ main = click.Group()
     type=click.Path(exists=False, dir_okay=False),
 )
 @click.option(
-    "-f", "--format", default="h5", type=click.Choice(["h5", "mat", "npz"]),
+    "-f",
+    "--format",
+    default="h5",
+    type=click.Choice(["h5", "mat", "npz"]),
 )
 def convert(infile, outfile, format):
     fls = []
