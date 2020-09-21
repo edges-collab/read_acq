@@ -1,5 +1,5 @@
 build/
-data/
+/data/
 read_acq\.egg-info/
 pip-wheel-metadata/
 *.pyc
