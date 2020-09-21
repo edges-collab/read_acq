@@ -7,7 +7,7 @@ from scipy.io import loadmat
 
 def test_h5(tmp_path_factory):
     data = Path(__file__).parent / "data/sample.acq"
-    print(data.parent.listdir())
+
     outfile = tmp_path_factory.mktemp("direc") / "tempfile.h5"
     Q, p, meta = decode_file(data, outfile=outfile, write_formats=["h5"], meta=True)
 
