@@ -9,7 +9,7 @@
 ;--datadir: /home/edges-0/Desktop/DATA/
 ;--site: asulab
 ;--instrument: lab
-;--output_file: 
+;--output_file:
 ;--switch_io_port: 12304 (0x3010)
 ;--switch_delay: 13.000000
 ;--input_channel: 1 (0x1)
@@ -24,7 +24,7 @@
 ;--num_fft_buffers: 100 (0x64)
 ;--stop_cycles: 0 (0x0)
 ;--stop_seconds: 0.000000
-;--stop_time: 
+;--stop_time:
 ;--show_plots: 1
 ;--plot_bin: 1 (0x1)
 # swpos 0 data_drops        0 adcmax  0.29004 adcmin -0.32678 temp  0 C nblk 2974 nspec 32768
