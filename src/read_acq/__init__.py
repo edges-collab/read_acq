@@ -1,5 +1,12 @@
 from pkg_resources import get_distribution, DistributionNotFound
-from .read_acq import Ancillary, decode_files, decode_file, encode, convert_h5
+from .read_acq import (
+    Ancillary,
+    decode_files,
+    decode_file,
+    encode,
+    convert_h5,
+    convert_file,
+)
 from . import writers
 from . import codec
 

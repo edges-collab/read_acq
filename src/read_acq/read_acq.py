@@ -205,8 +205,6 @@ class Ancillary:
 
 def decode_file(
     fname,
-    outfile=None,
-    write_formats=None,
     progress=True,
     meta=False,
     leave_progress=True,
@@ -218,10 +216,7 @@ def decode_file(
     ----------
     fname : str or Path
         filename of the ACQ file to read.
-    outfile: str, optional
-        Filename to which to write the data. Only used if `write_formats` is not empty.
-    write_formats: list of str, optional
-        Can contain any of 'mat', 'h5' and 'npz'. Default is 'h5'.
+
     progress: bool, optional
         Whether to display a progress bar for the read.
     meta: bool, optional
@@ -230,12 +225,6 @@ def decode_file(
         Whether to leave the progress bar (if one is used) on the screen when done.
         Useful to set to False if reading multiple files.
     """
-    for fmt in write_formats:
-        if fmt not in writers._WRITERS:
-            raise ValueError(
-                "The format {} does not have an associated writer.".format(fmt)
-            )
-
     anc = Ancillary(fname)
     n_times = anc.size
 
@@ -297,21 +286,6 @@ def decode_file(
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         Q = (p[0] - p[1]) / (p[2] - p[1])
 
-    if write_formats is None:
-        write_formats = ["h5"]
-
-    for fmt in write_formats:
-        getattr(writers, "_write_%s" % fmt)(
-            outfile=outfile or fname,
-            ancillary=anc.meta,
-            Qratio=Q.T,
-            time_data=anc.data,
-            freqs=anc.frequencies,
-            fastspec_version=anc.fastspec_version,
-            size=anc.size,
-            **{"p{}".format(i): p[i].T for i in range(3)},
-        )
-
     if meta:
         return Q.T, [pp.T for pp in p], anc
     else:
@@ -324,6 +298,49 @@ def decode_files(files, *args, **kwargs):
         files, disable=len(files) < 5, desc="Processing files", unit="files"
     ):
         decode_file(fl, progress=len(files) < 5, *args, **kwargs)
+
+
+def convert_file(
+    fname: [str, Path],
+    outfile: [str, None, Path] = None,
+    write_format: str = "h5",
+    **kwargs,
+):
+    """Convert an ACQ file to a different format.
+
+    Parameters
+    ----------
+    fname
+        The filename of the ACQ file to convert.
+    outfile
+        The path to the output file. If None, save to a file of the same name (with
+        different extension) as ``fname``.
+    write_format
+        The format to write to. Options are 'h5', 'mat' and 'npz'.
+
+    Other Parameters
+    ----------------
+    All other parameters passed through to :func:`decode_file`.
+    """
+    kwargs["meta"] = True
+    if write_format not in writers._WRITERS:
+        raise ValueError(
+            f"The format '{write_format}' does not have an associated writer."
+        )
+
+    Q, p, anc = decode_file(fname, **kwargs)
+
+    getattr(writers, f"_write_{write_format}")(
+        outfile=outfile or fname,
+        ancillary=anc.meta,
+        Qratio=Q,
+        time_data=anc.data,
+        freqs=anc.frequencies,
+        fastspec_version=anc.fastspec_version,
+        size=anc.size,
+        **{f"p{i}": p[i] for i in range(3)},
+    )
+    return Q, p, anc
 
 
 def encode(
