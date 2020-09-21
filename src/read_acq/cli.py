@@ -20,10 +20,14 @@ main = click.Group()
 
 @main.command()
 @click.argument(
-    "infile", nargs=-1,
+    "infile",
+    nargs=-1,
 )
 @click.option(
-    "-o", "--outfile", default=None, type=click.Path(exists=False, dir_okay=False),
+    "-o",
+    "--outfile",
+    default=None,
+    type=click.Path(exists=False, dir_okay=False),
 )
 @click.option(
     "-f",

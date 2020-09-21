@@ -67,8 +67,14 @@ setup(
             "read_acq.decode",
             ["src/read_acq/decode.c"],
             extra_compile_args=["-Ofast", "-Wall"],
-            libraries=["m",],
+            libraries=[
+                "m",
+            ],
         ),
     ],
-    entry_points={"console_scripts": ["acq = read_acq.cli:main",]},
+    entry_points={
+        "console_scripts": [
+            "acq = read_acq.cli:main",
+        ]
+    },
 )

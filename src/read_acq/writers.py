@@ -51,14 +51,14 @@ def _write_h5(outfile=None, ancillary=None, **data):
         "p1": data["p1"],
         "p2": data["p2"],
     }
-    meta = ancillary.update(fastspec_version=data["fastspec_version"])
+    ancillary.update(fastspec_version=data["fastspec_version"])
     freq_anc = {"frequencies": data["freqs"]}
-    time_anc = {name: data["time_data"][name] for name in data["time_data"].dtype.names}
+    time_anc = {name: data["time_data"][name] for name in data["time_data"]}
 
     obj = HDF5RawSpectrum.from_data(
         {
             "spectra": spectra,
-            "meta": meta,
+            "meta": ancillary,
             "freq_ancillary": freq_anc,
             "time_ancillary": time_anc,
         }
@@ -69,7 +69,9 @@ def _write_h5(outfile=None, ancillary=None, **data):
 
 @writer
 def _write_npz(outfile=None, ancillary=None, **data):
-    np.savez(outfile, **data, **ancillary)
+    data = copy.deepcopy(data)
+    data.update(ancillary)
+    np.savez(outfile, **data)
 
 
 @writer
