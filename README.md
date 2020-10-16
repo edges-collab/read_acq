@@ -1,6 +1,9 @@
 # read_acq
 
-Read ACQ files for EDGES.
+[![Build Status](https://travis-ci.org/edges-collab/read_acq.svg?branch=master)](https://travis-ci.org/edges-collab/read_acq)
+[![codecov](https://codecov.io/gh/edges-collab/read_acq/branch/master/graph/badge.svg)](https://codecov.io/gh/edges-collab/read_acq)
+
+**Read EDGES ACQ spectrum files.**
 
 
 ## Installation
