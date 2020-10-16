@@ -2,6 +2,14 @@
 
 [![Build Status](https://travis-ci.org/edges-collab/read_acq.svg?branch=master)](https://travis-ci.org/edges-collab/read_acq)
 [![codecov](https://codecov.io/gh/edges-collab/read_acq/branch/master/graph/badge.svg)](https://codecov.io/gh/edges-collab/read_acq)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+Using the badge in README.rst:
+
+.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
+    :target: https://github.com/psf/black
+
+Looks like this: Code style: black
 
 **Read EDGES ACQ spectrum files.**
 
