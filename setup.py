@@ -58,7 +58,7 @@ setup(
             "edges-io",
         ],
         "h5": [
-            "edges-io @ git+git://github.com/edges-collab/edges-io.git",
+            "edges-io",
         ],
     },
     ext_modules=[
