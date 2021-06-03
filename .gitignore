@@ -5,3 +5,4 @@ pip-wheel-metadata/
 *.pyc
 
 *.so
+dist/
