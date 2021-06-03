@@ -2,7 +2,7 @@ exclude: '^docs/conf.py|^tests/data/*'
 
 repos:
 - repo: git://github.com/pre-commit/pre-commit-hooks
-  rev: v3.2.0
+  rev: v4.0.1
   hooks:
   - id: trailing-whitespace
   - id: check-added-large-files
@@ -17,7 +17,7 @@ repos:
   - id: mixed-line-ending
     args: ['--fix=no']
 - repo: https://gitlab.com/pycqa/flake8
-  rev: 3.8.3  # pick a git hash / tag to point to
+  rev: 3.9.2  # pick a git hash / tag to point to
   hooks:
   - id: flake8
     additional_dependencies:
@@ -26,19 +26,23 @@ repos:
       - flake8-builtins
       - flake8-eradicate
       - pep8-naming
-      - flake8-isort
       - flake8-pytest
       - flake8-docstrings
       - flake8-rst-docstrings
       - flake8-rst
-      - darglint
+#      - darglint
       - flake8-copyright
       - flake8-ownership
+- repo: https://github.com/timothycrosley/isort
+  rev: 5.0.5
+  hooks:
+  - id: isort
+
 - repo: https://github.com/psf/black
-  rev: 20.8b1
+  rev: 21.5b2
   hooks:
   - id: black
 - repo: https://github.com/pre-commit/pygrep-hooks
-  rev: v1.6.0
+  rev: v1.8.0
   hooks:
     - id: rst-backticks

@@ -1,25 +1,20 @@
+"""Functions that write ACQ file data to different formats."""
+import copy
 from os import path
+
 import numpy as np
 from scipy import io
-import copy
-from edges_io.h5 import HDF5RawSpectrum
-
-try:
-    import h5py
-
-    HAVE_H5PY = True
-except ImportError:
-    HAVE_H5PY = False
 
 _WRITERS = []
 
 
 def writer(func):
-    format = func.__name__.split("_")[-1]
-    _WRITERS.append(format)
+    """Decorator to denote a function as a writer."""
+    fmt = func.__name__.split("_")[-1]
+    _WRITERS.append(fmt)
 
     def writer_wrapper(outfile=None, ancillary=None, **data):
-        outfile = _get_fname(outfile, format)
+        outfile = _get_fname(outfile, fmt)
         print("Writing {}...".format(outfile), end="", flush=True)
         func(outfile, ancillary, **data)
         print(" done")
@@ -27,14 +22,14 @@ def writer(func):
     return writer_wrapper
 
 
-def _get_fname(outfile=None, format=None):
+def _get_fname(outfile=None, fmt=None):
     if not outfile:
         raise Exception("You need to provide either outfile or infile!")
 
     if path.splitext(outfile)[1] in [".mat", ".h5", ".npz", ".acq"]:
-        outfile = path.splitext(outfile)[0] + "." + format
+        outfile = path.splitext(outfile)[0] + "." + fmt
     else:
-        outfile = outfile + "." + format
+        outfile = outfile + "." + fmt
 
     return outfile
 
@@ -42,8 +37,13 @@ def _get_fname(outfile=None, format=None):
 @writer
 def _write_h5(outfile=None, ancillary=None, **data):
     """Writes HDF5 file exactly as FastSpec should now write it out."""
-    if not HAVE_H5PY:
-        raise RuntimeError("You need the h5py library to write to HDF5 format!")
+    try:
+        from edges_io.h5 import HDF5RawSpectrum
+    except ImportError:
+        raise ImportError(
+            "To write to h5, you need to install edges_io or do "
+            "`pip install read_acq[h5]"
+        )
 
     spectra = {
         "Q": data["Qratio"],

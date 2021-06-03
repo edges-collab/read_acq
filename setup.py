@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
-from __future__ import absolute_import
-from __future__ import print_function
+"""Install the package."""
+from __future__ import absolute_import, print_function
 
 import io
 import re
-from setuptools import setup
+from os.path import dirname, join
+
 from numpy.distutils.core import Extension
-from os.path import dirname
-from os.path import join
-from setuptools import find_packages
+from setuptools import find_packages, setup
 
 
 def read(*names, **kwargs):
+    """Read a file to a string."""
     return io.open(
         join(dirname(__file__), *names), encoding=kwargs.get("encoding", "utf8")
     ).read()
@@ -37,7 +37,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     classifiers=[
-        # complete classifier list: http://pypi.python.org/pypi?%3Aaction=list_classifiers
+        # complete list: http://pypi.python.org/pypi?%3Aaction=list_classifiers
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
@@ -60,7 +60,9 @@ setup(
             "pytest-cov",
             "edges-io @ git+git://github.com/edges-collab/edges-io.git",
         ],
-        "all": ["h5py"],
+        "h5": [
+            "edges-io @ git+git://github.com/edges-collab/edges-io.git",
+        ],
     },
     ext_modules=[
         Extension(
