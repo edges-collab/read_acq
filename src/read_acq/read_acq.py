@@ -143,8 +143,12 @@ class Ancillary:
 
     @property
     def frequencies(self):
-        return np.linspace(
-            self.meta["freq_min"], self.meta["freq_max"], self.meta["nfreq"]
+        df = self.meta['freq_max'] / self.meta['nfreq']
+
+        # See edges-cal.tools.EdgesFrequencyRange for justification of using this 
+        # form.
+        return np.arange(
+            self.meta["freq_min"], self.meta["freq_max"], df
         )
 
     def get_ntimes(self, fname):
