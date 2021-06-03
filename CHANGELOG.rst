@@ -1,8 +1,15 @@
 Changelog
 =========
 
-dev
----
+0.4.0
+-----
+
+First version on PyPI!
+
+Fixed
+~~~~~
+
+- Frequency array now has the correct channel width (it was ever so slightly off).
 
 Changed
 ~~~~~~~
