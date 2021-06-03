@@ -58,7 +58,7 @@ setup(
             "pre-commit",
             "pytest>=5<6",
             "pytest-cov",
-            "edges-io @ git+git://github.com/edges-collab/edges-io.git",
+            "edges-io",
         ],
         "all": ["h5py"],
     },
