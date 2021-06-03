@@ -1,7 +1,7 @@
-from read_acq.codec import _encode_line, _decode_line, _encode
-from read_acq import encode
-
 import numpy as np
+
+from read_acq import encode
+from read_acq.codec import _decode_line, _encode, _encode_line
 
 
 def test_roundtrip():

@@ -1,8 +1,10 @@
 from pathlib import Path
-from read_acq import convert_file
+
 import h5py
 import numpy as np
 from scipy.io import loadmat
+
+from read_acq import convert_file
 
 
 def test_h5(tmp_path_factory):

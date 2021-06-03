@@ -1,11 +1,5 @@
 #! /usr/bin/env python
-"""
-Creates an array file for use by sensitivity.py.  The main product is the uv coverage produced by
-the array during the
-time it takes the sky to drift through the primary beam; other array parameters are also saved.
-Array specific information comes from an aipy cal file.  If track is set, produces the uv coverage
-for the length specified instead of that set by the primary beam.
-"""
+"""Command-Line Interface for read_acq."""
 
 import glob
 
@@ -34,7 +28,8 @@ main = click.Group()
     default="h5",
     type=click.Choice(["h5", "mat", "npz"]),
 )
-def convert(infile, outfile, format):
+def convert(infile, outfile, fmt):
+    """Convert an ACQ file to a different format."""
     fls = []
     for fl in infile:
         fls += glob.glob(fl)
@@ -43,4 +38,4 @@ def convert(infile, outfile, format):
     for fl in tqdm.tqdm(
         fls, disable=len(fls) < 5, desc="Processing files", unit="files"
     ):
-        convert_file(fl, outfile=outfile, write_format=format)
+        convert_file(fl, outfile=outfile, write_format=fmt)

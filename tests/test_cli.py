@@ -1,9 +1,11 @@
-from click.testing import CliRunner
-from read_acq.cli import convert
 from pathlib import Path
+
 import h5py
-from read_acq import decode_file
 import numpy as np
+from click.testing import CliRunner
+
+from read_acq import decode_file
+from read_acq.cli import convert
 
 
 def test_convert(tmp_path_factory):

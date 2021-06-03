@@ -33,10 +33,10 @@ repos:
 #      - darglint
       - flake8-copyright
       - flake8-ownership
-- repo: https://github.com/timothycrosley/isort
-  rev: 5.0.5
-  hooks:
-  - id: isort
+# - repo: https://github.com/timothycrosley/isort
+#   rev: 5.8.0
+#   hooks:
+#   - id: isort
 
 - repo: https://github.com/psf/black
   rev: 21.5b2

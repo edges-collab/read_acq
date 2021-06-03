@@ -1,6 +1,8 @@
+"""Wrapper for C-code that does the encoding-decoding."""
 import ctypes
 import glob
 import os
+
 import numpy as np
 
 cdll = glob.glob(
@@ -71,9 +73,9 @@ def _encode(data):
 def _encode_line(data, nblk):
     """Encode an array of data.
 
-    This takes an array of linear-scaled float data and converts it to a string of 64-bit
-    encoded integers. It performs scaling to match the output of fastspec, and also
-    blanks out the first 10 entries of data (which are never used in fastspec).
+    This takes an array of linear-scaled float data and converts it to a string of
+    64-bit encoded integers. It performs scaling to match the output of fastspec, and
+    also blanks out the first 10 entries of data (which are never used in fastspec).
 
     The output is *not* exactly the inverse of :func:`_decode_line`, but is the same up
     to a scaling constant, as well as some clipping on dynamic range. Thus, while it is
