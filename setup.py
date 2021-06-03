@@ -25,9 +25,9 @@ setup(
     long_description="%s\n%s"
     % (
         re.compile("^.. start-badges.*^.. end-badges", re.M | re.S).sub(
-            "", read("README.md")
+            "", read("README.rst")
         ),
-        re.sub(":[a-z]+:`~?(.*?)`", r"``\1``", read("CHANGELOG.md")),
+        re.sub(":[a-z]+:`~?(.*?)`", r"``\1``", read("CHANGELOG.rst")),
     ),
     author="EDGES Collaboration",
     author_email="steven.g.murray@asu.edu",
