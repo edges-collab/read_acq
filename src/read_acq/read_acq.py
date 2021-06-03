@@ -62,7 +62,7 @@ class Ancillary:
 
         cline = self._splits.findall(cline)
         if int(cline[0]) != 0:
-            raise IOError(
+            raise OSError(
                 "The format of the ACQ file is incorrect: should start with swpos = 0"
             )
 
@@ -150,7 +150,7 @@ class Ancillary:
     def get_ntimes(self, fname):
         # count lines
         ntimes = 0
-        with open(fname, "r") as fl:
+        with open(fname) as fl:
             nlines = 0
             for line in fl.readlines():
                 if line[0] not in "#*;" and line:
@@ -234,13 +234,13 @@ def decode_file(
         np.empty((n_times, anc.meta["nfreq"])),
     ]
 
-    with open(fname, "r") as fl:
+    with open(fname) as fl:
         i = 0
         for line in tqdm.tqdm(
             fl.readlines(),
             disable=not progress,
             total=anc.meta["n_file_lines"],
-            desc="Reading {}".format(Path(fname).name),
+            desc=f"Reading {Path(fname).name}",
             unit="lines",
             leave=leave_progress,
         ):

@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
-from __future__ import absolute_import
-from __future__ import print_function
 
 import io
 import re
@@ -13,7 +10,7 @@ from setuptools import find_packages
 
 
 def read(*names, **kwargs):
-    return io.open(
+    return open(
         join(dirname(__file__), *names), encoding=kwargs.get("encoding", "utf8")
     ).read()
 

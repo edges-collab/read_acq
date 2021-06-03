@@ -1,6 +1,7 @@
 ========
 read_acq
 ========
+**Read EDGES ACQ spectrum files.**
 
 .. image:: https://travis-ci.org/edges-collab/read_acq.svg?branch=master
     :target: https://travis-ci.org/edges-collab/read_acq
@@ -8,8 +9,6 @@ read_acq
     :target: https://travis-ci.org/edges-collabcodecov.io/gh/edges-collab/read_acq
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
     :target: https://github.com/psf/black
-
-**Read EDGES ACQ spectrum files.**
 
 Installation
 ============
@@ -42,7 +41,7 @@ The command can be run from anywhere on the system, and the file given can be a
 relative or absolute path.
 
 Multiple data files can be given, and each will be converted. Wildcards may also be
-used in any of the filenames, eg.:
+used in any of the filenames, eg.::
 
     acq convert data/*.acq
 

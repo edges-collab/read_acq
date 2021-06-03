@@ -20,7 +20,7 @@ def writer(func):
 
     def writer_wrapper(outfile=None, ancillary=None, **data):
         outfile = _get_fname(outfile, format)
-        print("Writing {}...".format(outfile), end="", flush=True)
+        print(f"Writing {outfile}...", end="", flush=True)
         func(outfile, ancillary, **data)
         print(" done")
 
