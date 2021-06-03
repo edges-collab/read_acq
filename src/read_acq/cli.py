@@ -6,8 +6,6 @@ time it takes the sky to drift through the primary beam; other array parameters 
 Array specific information comes from an aipy cal file.  If track is set, produces the uv coverage
 for the length specified instead of that set by the primary beam.
 """
-from __future__ import division
-from __future__ import print_function
 
 import glob
 

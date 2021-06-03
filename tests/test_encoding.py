@@ -43,5 +43,5 @@ def test_full_file_encode(tmp_path_factory):
 
     encode(fname, data, meta, ancillary)
 
-    with open(fname, "r") as fl:
+    with open(fname) as fl:
         assert fl.readline() == ";--temp: 0\n"

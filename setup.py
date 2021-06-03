@@ -1,9 +1,6 @@
 #!/usr/bin/env python
-# -*- encoding: utf-8 -*-
 """Install the package."""
-from __future__ import absolute_import, print_function
 
-import io
 import re
 from os.path import dirname, join
 
@@ -13,7 +10,7 @@ from setuptools import find_packages, setup
 
 def read(*names, **kwargs):
     """Read a file to a string."""
-    return io.open(
+    return open(
         join(dirname(__file__), *names), encoding=kwargs.get("encoding", "utf8")
     ).read()
 
@@ -25,9 +22,9 @@ setup(
     long_description="%s\n%s"
     % (
         re.compile("^.. start-badges.*^.. end-badges", re.M | re.S).sub(
-            "", read("README.md")
+            "", read("README.rst")
         ),
-        re.sub(":[a-z]+:`~?(.*?)`", r"``\1``", read("CHANGELOG.md")),
+        re.sub(":[a-z]+:`~?(.*?)`", r"``\1``", read("CHANGELOG.rst")),
     ),
     author="EDGES Collaboration",
     author_email="steven.g.murray@asu.edu",
@@ -58,7 +55,7 @@ setup(
             "pre-commit",
             "pytest>=5<6",
             "pytest-cov",
-            "edges-io @ git+git://github.com/edges-collab/edges-io.git",
+            "edges-io",
         ],
         "h5": [
             "edges-io @ git+git://github.com/edges-collab/edges-io.git",
