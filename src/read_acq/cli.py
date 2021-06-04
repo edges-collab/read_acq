@@ -24,7 +24,7 @@ main = click.Group()
 )
 @click.option(
     "-f",
-    "--format",
+    "--fmt",
     default="h5",
     type=click.Choice(["h5", "mat", "npz"]),
 )
