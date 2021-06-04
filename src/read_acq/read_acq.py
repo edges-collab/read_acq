@@ -2,7 +2,7 @@
 import re
 import warnings
 from pathlib import Path
-from typing import List
+from typing import List, Union, Dict
 
 import numpy as np
 import tqdm
@@ -301,8 +301,8 @@ def decode_files(files, *args, **kwargs):
 
 
 def convert_file(
-    fname: [str, Path],
-    outfile: [str, None, Path] = None,
+    fname: Union[str, Path],
+    outfile: Union[str, None, Path] = None,
     write_format: str = "h5",
     **kwargs,
 ):
@@ -344,7 +344,10 @@ def convert_file(
 
 
 def encode(
-    filename: [str, Path], p: List[np.ndarray], meta: dict, ancillary: np.ndarray
+    filename: [str, Path],
+    p: List[np.ndarray],
+    meta: dict,
+    ancillary: Dict[str, np.ndarray],
 ):
     """
     Encode raw powers and ancillary data as an ACQ file.
@@ -362,6 +365,11 @@ def encode(
     ancillary : structured array
         Time-dependent ancillary information, such as times and adcmin/adcmax.
     """
+    p = np.array(p)
+
+    # data_drops is optional in the .h5 file because we don't really need it.
+    data_drops = ancillary.get("data_drops", 0)
+
     with open(filename, "w") as fl:
         # Write the header
         for k, v in meta.items():
@@ -370,9 +378,14 @@ def encode(
         # Go through each time
         for i in range(len(p[0])):
             for switch, pp in enumerate(p[:, i]):
+                dd = (
+                    data_drops[i, switch]
+                    if hasattr(data_drops, "__len__")
+                    else data_drops
+                )
                 fl.write(
                     f"# swpos {switch} "
-                    f"data_drops\t{ancillary['data_drops'][i, switch]} "
+                    f"data_drops\t{dd} "
                     f"adcmax  {ancillary['adcmax'][i, switch]} "
                     f"adcmin {ancillary['adcmin'][i, switch]} "
                     f"temp  {meta['temp']} C "
@@ -381,12 +394,13 @@ def encode(
                 )
 
                 fl.write(
-                    f"{ancillary['time'][i]} {switch}\t{meta['freq_min']}  "
+                    f"{ancillary['times'][i]} {switch}\t{meta['freq_min']}  "
                     f"{meta['freq_res']}  {meta['freq_max']}  "
                     f"0.3 spectrum "
                 )
 
                 fl.write(_encode_line(pp, meta["nblk"]))
+                fl.write("\n")
 
 
 def convert_h5(infile, outfile):
@@ -406,12 +420,10 @@ def convert_h5(infile, outfile):
 
     p = [obj["spectra"]["p0"], obj["spectra"]["p1"], obj["spectra"]["p2"]]
     meta = obj["meta"]
-    ancillary = np.zeros(
-        (len(p[0]), 3),
-        dtype=[("adcmax", float), ("adcmin", float), ("data_drops", int)],
-    )
+
+    ancillary = {}
     ancillary["adcmax"] = obj["time_ancillary"]["adcmax"]
     ancillary["adcmin"] = obj["time_ancillary"]["adcmin"]
-    ancillary["data_drops"] = obj["time_ancillary"]["data_drops"]
+    ancillary["times"] = obj["time_ancillary"]["times"]
 
-    encode(outfile, p=p, meta=meta, ancillary=ancillary)
+    encode(outfile, p=[pp.T for pp in p], meta=meta, ancillary=ancillary)
