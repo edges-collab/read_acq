@@ -1,7 +1,8 @@
 """Functions that write ACQ file data to different formats."""
 import copy
-from os import path
+from pathlib import Path
 
+from typing import Optional, Union
 import numpy as np
 from scipy import io
 
@@ -22,16 +23,11 @@ def writer(func):
     return writer_wrapper
 
 
-def _get_fname(outfile=None, fmt=None):
+def _get_fname(outfile: Optional[Union[Path, str]] = None, fmt: Optional[str] = None):
     if not outfile:
         raise Exception("You need to provide either outfile or infile!")
-
-    if path.splitext(outfile)[1] in [".mat", ".h5", ".npz", ".acq"]:
-        outfile = path.splitext(outfile)[0] + "." + fmt
-    else:
-        outfile = outfile + "." + fmt
-
-    return outfile
+    outfile = Path(outfile)
+    return outfile.with_suffix(f".{fmt}")
 
 
 @writer

@@ -34,6 +34,6 @@ def test_npz(tmp_path_factory):
     outfile = tmp_path_factory.mktemp("direc") / "tempfile"
     Q, p, meta = convert_file(data, outfile=outfile, write_format="npz", meta=True)
 
-    matdata = np.load(outfile + ".npz")
+    matdata = np.load(outfile.with_suffix(".npz"))
 
     assert np.allclose(matdata["Qratio"][~np.isnan(Q)], Q[~np.isnan(Q)])
