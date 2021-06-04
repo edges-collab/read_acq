@@ -26,14 +26,18 @@ repos:
       - flake8-builtins
       - flake8-eradicate
       - pep8-naming
-      - flake8-isort
       - flake8-pytest
       - flake8-docstrings
       - flake8-rst-docstrings
       - flake8-rst
-      - darglint
+#      - darglint
       - flake8-copyright
       - flake8-ownership
+# - repo: https://github.com/timothycrosley/isort
+#   rev: 5.8.0
+#   hooks:
+#   - id: isort
+
 - repo: https://github.com/psf/black
   rev: 21.5b2
   hooks:

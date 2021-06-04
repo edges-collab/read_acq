@@ -1,9 +1,11 @@
-from click.testing import CliRunner
-from read_acq.cli import convert
 from pathlib import Path
+
 import h5py
-from read_acq import decode_file
 import numpy as np
+from click.testing import CliRunner
+
+from read_acq import decode_file
+from read_acq.cli import convert
 
 
 def test_convert(tmp_path_factory):
@@ -12,9 +14,7 @@ def test_convert(tmp_path_factory):
     data = Path(__file__).parent / "data/sample.acq"
     outfile = tmp_path_factory.mktemp("direc") / "tempfile.h5"
 
-    result = cli.invoke(
-        convert, [str(data), "--outfile", str(outfile), "--format", "h5"]
-    )
+    result = cli.invoke(convert, [str(data), "--outfile", str(outfile), "--fmt", "h5"])
     assert result.exit_code == 0
     print(result.output)
 

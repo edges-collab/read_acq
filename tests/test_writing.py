@@ -1,8 +1,10 @@
 from pathlib import Path
-from read_acq import convert_file
+
 import h5py
 import numpy as np
 from scipy.io import loadmat
+
+from read_acq import convert_file
 
 
 def test_h5(tmp_path_factory):
@@ -29,9 +31,9 @@ def test_mat(tmp_path_factory):
 
 def test_npz(tmp_path_factory):
     data = Path(__file__).parent / "data/sample.acq"
-    outfile = tmp_path_factory.mktemp("direc") / "tempfile.npz"
+    outfile = tmp_path_factory.mktemp("direc") / "tempfile"
     Q, p, meta = convert_file(data, outfile=outfile, write_format="npz", meta=True)
 
-    matdata = np.load(outfile)
+    matdata = np.load(outfile.with_suffix(".npz"))
 
     assert np.allclose(matdata["Qratio"][~np.isnan(Q)], Q[~np.isnan(Q)])

@@ -1,26 +1,18 @@
+"""Functions and classes for reading and writing the .acq format."""
 import re
 import warnings
 from pathlib import Path
-from typing import List
-from .codec import _encode_line, _decode_line
+from typing import List, Union, Dict
 
 import numpy as np
 import tqdm
+
 from . import writers
-
-from edges_io.h5 import HDF5RawSpectrum
-
-
-try:
-    import h5py
-
-    HAVE_H5PY = True
-except ImportError:
-    HAVE_H5PY = False
+from .codec import _decode_line, _encode_line
 
 
 class Ancillary:
-    """Represents ancillary data of a file"""
+    """The ancillary data of an ACQ file."""
 
     header_char = ";"
     DTYPE = np.dtype(
@@ -55,6 +47,7 @@ class Ancillary:
         self._current_size = 0
 
     def check_file(self, fname):
+        """Check if the file is in the correct format."""
         with open(fname) as fl:
             cline = ""
             while not cline.startswith("#"):
@@ -115,6 +108,7 @@ class Ancillary:
         return out
 
     def read_metadata(self, fname):
+        """Read the metadata of the ACQ file."""
         out = self._read_header(fname)
 
         with open(fname) as fl:
@@ -143,11 +137,15 @@ class Ancillary:
 
     @property
     def frequencies(self):
-        return np.linspace(
-            self.meta["freq_min"], self.meta["freq_max"], self.meta["nfreq"]
-        )
+        """The frequencies associated with the spectrum measurements."""
+        df = self.meta["freq_max"] / self.meta["nfreq"]
+
+        # See edges-cal.tools.EdgesFrequencyRange for justification of using this
+        # form.
+        return np.arange(self.meta["freq_min"], self.meta["freq_max"], df)
 
     def get_ntimes(self, fname):
+        """Get the number of spectra in the file."""
         # count lines
         ntimes = 0
         with open(fname) as fl:
@@ -160,7 +158,7 @@ class Ancillary:
 
     @property
     def times(self):
-        """The times associated with the ancillary data as datetime objects"""
+        """The times associated with the ancillary data as datetime objects."""
         raise NotImplementedError("We haven't done this yet.")
 
     def _add_to_self(self, add_to_self=None):
@@ -171,6 +169,7 @@ class Ancillary:
         return add_to_self
 
     def parse_cline(self, line, add_to_self=None):
+        """Parse a comment line and obtain metadata."""
         add_to_self = self._add_to_self(add_to_self)
         line = self._splits.findall(line)
 
@@ -191,16 +190,16 @@ class Ancillary:
             return out
 
     def parse_specline(self, line, add_to_self=None):
-        """Parse an ancillary data line of a file, and return a dict"""
+        """Parse an ancillary data line of a file, and return a dict."""
         add_to_self = self._add_to_self(add_to_self)
 
         line = self._splits.findall(line)
 
-        if add_to_self:
-            self.data["times"][self._current_size] = line[0]
-            self._current_size += 1
-        else:
+        if not add_to_self:
             return [line[0]] + line[2:]
+
+        self.data["times"][self._current_size] = line[0]
+        self._current_size += 1
 
 
 def decode_file(
@@ -247,7 +246,8 @@ def decode_file(
             switch_state = i % 3
             i_time = i // 3
 
-            # Break when we hit the last "2" switch state (there may be a dangling 0 and 1)
+            # Break when we hit the last "2" switch state (there may be a
+            # dangling 0 and 1)
             if i_time == n_times:
                 break
 
@@ -301,8 +301,8 @@ def decode_files(files, *args, **kwargs):
 
 
 def convert_file(
-    fname: [str, Path],
-    outfile: [str, None, Path] = None,
+    fname: Union[str, Path],
+    outfile: Union[str, None, Path] = None,
     write_format: str = "h5",
     **kwargs,
 ):
@@ -344,7 +344,10 @@ def convert_file(
 
 
 def encode(
-    filename: [str, Path], p: List[np.ndarray], meta: dict, ancillary: np.ndarray
+    filename: [str, Path],
+    p: List[np.ndarray],
+    meta: dict,
+    ancillary: Dict[str, np.ndarray],
 ):
     """
     Encode raw powers and ancillary data as an ACQ file.
@@ -362,6 +365,10 @@ def encode(
     ancillary : structured array
         Time-dependent ancillary information, such as times and adcmin/adcmax.
     """
+    p = np.array(p)
+
+    # data_drops is optional in the .h5 file because we don't really need it.
+    data_drops = ancillary.get("data_drops", 0)
 
     with open(filename, "w") as fl:
         # Write the header
@@ -371,8 +378,14 @@ def encode(
         # Go through each time
         for i in range(len(p[0])):
             for switch, pp in enumerate(p[:, i]):
+                dd = (
+                    data_drops[i, switch]
+                    if hasattr(data_drops, "__len__")
+                    else data_drops
+                )
                 fl.write(
-                    f"# swpos {switch} data_drops\t{ancillary['data_drops'][i, switch]} "
+                    f"# swpos {switch} "
+                    f"data_drops\t{dd} "
                     f"adcmax  {ancillary['adcmax'][i, switch]} "
                     f"adcmin {ancillary['adcmin'][i, switch]} "
                     f"temp  {meta['temp']} C "
@@ -381,12 +394,13 @@ def encode(
                 )
 
                 fl.write(
-                    f"{ancillary['time'][i]} {switch}\t{meta['freq_min']}  "
+                    f"{ancillary['times'][i]} {switch}\t{meta['freq_min']}  "
                     f"{meta['freq_res']}  {meta['freq_max']}  "
                     f"0.3 spectrum "
                 )
 
                 fl.write(_encode_line(pp, meta["nblk"]))
+                fl.write("\n")
 
 
 def convert_h5(infile, outfile):
@@ -394,16 +408,22 @@ def convert_h5(infile, outfile):
 
     HDF5 file must be in the new format used by fastspec.
     """
+    try:
+        from edges_io.h5 import HDF5RawSpectrum
+    except ImportError:  # pragma: nocover
+        raise ImportError(
+            "To use convert_h5, you need to install edges_io or do "
+            "`pip install read_acq[h5]`"
+        )
+
     obj = HDF5RawSpectrum(infile)
 
     p = [obj["spectra"]["p0"], obj["spectra"]["p1"], obj["spectra"]["p2"]]
     meta = obj["meta"]
-    ancillary = np.zeros(
-        (len(p[0]), 3),
-        dtype=[("adcmax", float), ("adcmin", float), ("data_drops", int)],
-    )
+
+    ancillary = {}
     ancillary["adcmax"] = obj["time_ancillary"]["adcmax"]
     ancillary["adcmin"] = obj["time_ancillary"]["adcmin"]
-    ancillary["data_drops"] = obj["time_ancillary"]["data_drops"]
+    ancillary["times"] = obj["time_ancillary"]["times"]
 
-    encode(outfile, p=p, meta=meta, ancillary=ancillary)
+    encode(outfile, p=[pp.T for pp in p], meta=meta, ancillary=ancillary)
