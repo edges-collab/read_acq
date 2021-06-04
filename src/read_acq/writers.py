@@ -39,7 +39,7 @@ def _write_h5(outfile=None, ancillary=None, **data):
     """Writes HDF5 file exactly as FastSpec should now write it out."""
     try:
         from edges_io.h5 import HDF5RawSpectrum
-    except ImportError:
+    except ImportError:  # pragma: no cover
         raise ImportError(
             "To write to h5, you need to install edges_io or do "
             "`pip install read_acq[h5]"

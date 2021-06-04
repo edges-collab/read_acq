@@ -410,7 +410,7 @@ def convert_h5(infile, outfile):
     """
     try:
         from edges_io.h5 import HDF5RawSpectrum
-    except ImportError:
+    except ImportError:  # pragma: nocover
         raise ImportError(
             "To use convert_h5, you need to install edges_io or do "
             "`pip install read_acq[h5]`"
