@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.4.4 [04.June.2021]
+--------------------
+
+Fixed
+~~~~~
+
+- HDF5 to ACQ converter now works.
+
 0.4.0
 -----
 
