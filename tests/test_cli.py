@@ -1,8 +1,7 @@
-from pathlib import Path
-
 import h5py
 import numpy as np
 from click.testing import CliRunner
+from pathlib import Path
 
 from read_acq import decode_file
 from read_acq.cli import convert

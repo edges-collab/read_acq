@@ -1,9 +1,8 @@
 """Wrapper for C-code that does the encoding-decoding."""
 import ctypes
 import glob
-import os
-
 import numpy as np
+import os
 
 cdll = glob.glob(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so")
@@ -84,7 +83,7 @@ def _encode_line(data, nblk):
     fully linear, and only the ratio is ever used.
     """
     # We scale the data to achieve same dynamic range as in fastspec
-    d = data / (2 * nblk * len(data) * 10 ** 3.84)
+    d = data / (2 * nblk * len(data) * 10**3.84)
 
     # Set first 10 values to 0 because they are never used
     d[:10] = 0
