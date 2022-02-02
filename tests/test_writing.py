@@ -1,7 +1,6 @@
-from pathlib import Path
-
 import h5py
 import numpy as np
+from pathlib import Path
 from scipy.io import loadmat
 
 from read_acq import convert_file

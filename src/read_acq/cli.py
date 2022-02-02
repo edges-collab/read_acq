@@ -1,9 +1,8 @@
 #! /usr/bin/env python
 """Command-Line Interface for read_acq."""
 
-import glob
-
 import click
+import glob
 import tqdm
 
 from . import convert_file

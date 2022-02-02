@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """Install the package."""
 
-import re
-from os.path import dirname, join
-
-from numpy.distutils.core import Extension
 from setuptools import find_packages, setup
+
+import re
+from numpy.distutils.core import Extension
+from os.path import dirname, join
 
 
 def read(*names, **kwargs):

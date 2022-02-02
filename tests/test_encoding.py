@@ -1,8 +1,9 @@
+import pytest
+
 import numpy as np
 
-from read_acq import encode, convert_file, convert_h5
+from read_acq import convert_file, convert_h5, encode
 from read_acq.codec import _decode_line, _encode, _encode_line
-import pytest
 
 
 def test_roundtrip():

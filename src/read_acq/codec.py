@@ -1,9 +1,8 @@
 """Wrapper for C-code that does the encoding-decoding."""
 import ctypes
 import glob
-import os
-
 import numpy as np
+import os
 
 cdll = glob.glob(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so")

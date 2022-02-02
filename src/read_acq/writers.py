@@ -1,10 +1,9 @@
 """Functions that write ACQ file data to different formats."""
 import copy
-from pathlib import Path
-
-from typing import Optional, Union
 import numpy as np
+from pathlib import Path
 from scipy import io
+from typing import Optional, Union
 
 _WRITERS = []
 

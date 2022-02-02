@@ -1,4 +1,4 @@
-exclude: '^docs/conf.py|^tests/data/*'
+exclude: '^docs/conf.py|^tests/data/'
 
 ci:
   autoupdate_schedule: monthly
@@ -33,13 +33,12 @@ repos:
       - flake8-docstrings
       - flake8-rst-docstrings
       - flake8-rst
-#      - darglint
       - flake8-copyright
-      - flake8-ownership
-# - repo: https://github.com/timothycrosley/isort
-#   rev: 5.8.0
-#   hooks:
-#   - id: isort
+
+- repo: https://github.com/timothycrosley/isort
+  rev: 5.8.0
+  hooks:
+  - id: isort
 
 - repo: https://github.com/psf/black
   rev: 22.1.0

@@ -1,11 +1,10 @@
 """Functions and classes for reading and writing the .acq format."""
+import numpy as np
 import re
+import tqdm
 import warnings
 from pathlib import Path
-from typing import List, Union, Dict
-
-import numpy as np
-import tqdm
+from typing import Dict, List, Union
 
 from . import writers
 from .codec import _decode_line, _encode_line
