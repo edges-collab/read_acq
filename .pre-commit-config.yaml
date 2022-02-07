@@ -35,8 +35,8 @@ repos:
       - flake8-rst
       - flake8-copyright
 
-- repo: https://github.com/timothycrosley/isort
-  rev: 5.8.0
+- repo: https://github.com/PyCQA/isort
+  rev: 5.10.1
   hooks:
   - id: isort
 
