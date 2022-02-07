@@ -43,4 +43,4 @@ jobs:
             pip install \
             --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple \
-            read_acq
+            read_acq --pre
