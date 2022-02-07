@@ -3,3 +3,14 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0", "numpy"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
+
+
+
+[tool.semantic_release]
+version_source = "tag"
+branch = "main"                             # branch to make releases of
+changelog_file = "CHANGELOG.md"             # changelog file
+build_command = "python -m pip install build && python -m build --sdist"
+dist_path = "dist/"                         # where to put dists
+upload_to_pypi = false                      # don't auto-upload to PyPI
+remove_dist = false                         # don't remove dists

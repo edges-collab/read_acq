@@ -58,4 +58,9 @@ repos:
     rev: v2.31.0
     hooks:
     -   id: pyupgrade
-        args: [--py36-plus]
+        args: [--py38-plus]
+
+- repo: https://github.com/asottile/setup-cfg-fmt
+  rev: v1.20.0
+  hooks:
+  -   id: setup-cfg-fmt
