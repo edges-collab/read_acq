@@ -5,8 +5,10 @@ on:
       - main
 
 jobs:
-  deploy:
+  release:
     runs-on: ubuntu-latest
+    outputs:
+      run_rest_jobs: ${{ steps.semrel.outputs.dist_made }}
     steps:
       # Step 2. Set up Python 3.9
       - uses: actions/setup-python@v2
@@ -18,11 +20,23 @@ jobs:
           fetch-depth: 0
       # Step 4. Use PSR to make release
       - name: Python Semantic Release
+        id: semrel
         run: |
             pip install python-semantic-release
             git config user.name github-actions
             git config user.email github-actions@github.com
             semantic-release publish
+            if [ "$(ls -A dist)" ]; then
+              echo "::set-output name=dist_made::true"
+            else
+              echo "::set-output name=dist_made::false"
+            fi
+
+  deploy:
+    needs: [release]
+    if: needs.release.outputs.run_rest_jobs == 'true'
+    runs-on: ubuntu-latest
+    steps:
       # Step 5. Publish to TestPyPI
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
