@@ -206,6 +206,7 @@ def decode_file(
     progress=True,
     meta=False,
     leave_progress=True,
+    specline_swpos: int = 0,
 ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -222,9 +223,14 @@ def decode_file(
     leave_progress : bool, optional
         Whether to leave the progress bar (if one is used) on the screen when done.
         Useful to set to False if reading multiple files.
+    specline_swpos
+        Every entry has a time associated with it, but we only keep the time associated
+        with *one* of the switch positions. This specifies which. Note that for 
+        most purposes, Alan's code uses the non-default 2, corresponding to the input.
     """
     anc = Ancillary(fname)
     n_times = anc.size
+    assert 0 <= specline_swpos <= 2
 
     p = [
         np.empty((n_times, anc.meta["nfreq"])),
@@ -271,7 +277,7 @@ def decode_file(
             spec = _decode_line(data_string.lstrip())
 
             # Parse ancillary data
-            if not switch_state:
+            if switch_state == specline_swpos:
                 anc.parse_specline(line_ancillary)
 
             # Save current spectrum into p at the right switch state
