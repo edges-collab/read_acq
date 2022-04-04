@@ -199,7 +199,8 @@ class Ancillary:
             return [line[0]] + line[2:]
 
         self.data["times"][self._current_size, swpos] = line[0]
-        self._current_size += 1
+        if swpos == 2:
+            self._current_size += 1
 
 
 def decode_file(
