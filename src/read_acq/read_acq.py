@@ -1,10 +1,11 @@
 """Functions and classes for reading and writing the .acq format."""
+from __future__ import annotations
+
 import numpy as np
 import re
 import tqdm
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union
 
 from . import writers
 from .codec import _decode_line, _encode_line
@@ -38,7 +39,7 @@ class Ancillary:
         self.data = {
             "adcmax": np.zeros((self.size, 3), dtype=np.float32),
             "adcmin": np.zeros((self.size, 3), dtype=np.float32),
-            "times": np.zeros(self.size, dtype="S17"),
+            "times": np.zeros((self.size, 3), dtype="S17"),
         }
         if "data_drops" in self.meta:
             self.data["data_drops"] = np.zeros((self.size, 3), dtype=int)
@@ -188,8 +189,8 @@ class Ancillary:
                 out["data_drops"] = int(line[1])
             return out
 
-    def parse_specline(self, line, add_to_self=None):
-        """Parse an ancillary data line of a file, and return a dict."""
+    def parse_specline(self, line, swpos, add_to_self=None):
+        """Parse an ancillary data line of a file."""
         add_to_self = self._add_to_self(add_to_self)
 
         line = self._splits.findall(line)
@@ -197,7 +198,7 @@ class Ancillary:
         if not add_to_self:
             return [line[0]] + line[2:]
 
-        self.data["times"][self._current_size] = line[0]
+        self.data["times"][self._current_size, swpos] = line[0]
         self._current_size += 1
 
 
@@ -206,7 +207,6 @@ def decode_file(
     progress=True,
     meta=False,
     leave_progress=True,
-    specline_swpos: int = 0,
 ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -223,14 +223,9 @@ def decode_file(
     leave_progress : bool, optional
         Whether to leave the progress bar (if one is used) on the screen when done.
         Useful to set to False if reading multiple files.
-    specline_swpos
-        Every entry has a time associated with it, but we only keep the time associated
-        with *one* of the switch positions. This specifies which. Note that for
-        most purposes, Alan's code uses the non-default 2, corresponding to the input.
     """
     anc = Ancillary(fname)
     n_times = anc.size
-    assert 0 <= specline_swpos <= 2
 
     p = [
         np.empty((n_times, anc.meta["nfreq"])),
@@ -277,8 +272,7 @@ def decode_file(
             spec = _decode_line(data_string.lstrip())
 
             # Parse ancillary data
-            if switch_state == specline_swpos:
-                anc.parse_specline(line_ancillary)
+            anc.parse_specline(line_ancillary, switch_state)
 
             # Save current spectrum into p at the right switch state
             p[switch_state][i_time] = spec
@@ -306,8 +300,8 @@ def decode_files(files, *args, **kwargs):
 
 
 def convert_file(
-    fname: Union[str, Path],
-    outfile: Union[str, None, Path] = None,
+    fname: str | Path,
+    outfile: str | None | Path = None,
     write_format: str = "h5",
     **kwargs,
 ):
@@ -349,10 +343,10 @@ def convert_file(
 
 
 def encode(
-    filename: [str, Path],
-    p: List[np.ndarray],
+    filename: str | Path,
+    p: list[np.ndarray],
     meta: dict,
-    ancillary: Dict[str, np.ndarray],
+    ancillary: dict[str, np.ndarray],
 ):
     """
     Encode raw powers and ancillary data as an ACQ file.
@@ -374,6 +368,8 @@ def encode(
 
     # data_drops is optional in the .h5 file because we don't really need it.
     data_drops = ancillary.get("data_drops", 0)
+
+    time_has_3dim = len(ancillary["times"].shape) == 2
 
     with open(filename, "w") as fl:
         # Write the header
@@ -398,8 +394,12 @@ def encode(
                     f"nspec {meta['nfreq']}\n"
                 )
 
+                time = ancillary["times"][i]
+                if time_has_3dim:
+                    time = time[switch]
+
                 fl.write(
-                    f"{ancillary['times'][i]} {switch}\t{meta['freq_min']}  "
+                    f"{time} {switch}\t{meta['freq_min']}  "
                     f"{meta['freq_res']}  {meta['freq_max']}  "
                     f"0.3 spectrum "
                 )
