@@ -225,7 +225,7 @@ def decode_file(
         Useful to set to False if reading multiple files.
     specline_swpos
         Every entry has a time associated with it, but we only keep the time associated
-        with *one* of the switch positions. This specifies which. Note that for 
+        with *one* of the switch positions. This specifies which. Note that for
         most purposes, Alan's code uses the non-default 2, corresponding to the input.
     """
     anc = Ancillary(fname)
