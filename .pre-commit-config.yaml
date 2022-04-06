@@ -4,7 +4,7 @@ ci:
   autoupdate_schedule: monthly
 
 repos:
-- repo: git://github.com/pre-commit/pre-commit-hooks
+- repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.1.0
   hooks:
   - id: trailing-whitespace
@@ -64,3 +64,9 @@ repos:
   rev: v1.20.1
   hooks:
   -   id: setup-cfg-fmt
+
+- repo: https://github.com/commitizen-tools/commitizen
+  rev: v2.23.0
+  hooks:
+    - id: commitizen
+      stages: [commit-msg]
