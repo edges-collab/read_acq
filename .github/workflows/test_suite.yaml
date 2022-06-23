@@ -70,7 +70,7 @@ jobs:
         if: matrix.package == 'edges-cal'
         run: python -m ipykernel install --user --name edges --display-name "edges"
       - name: Print Versions
-        run: pip freeze | grep "edges-"
+        run: pip freeze | grep -E "edges-|read_acq"
       - name: Run Tests
         run: |
           cd ../${{ matrix.package }}
