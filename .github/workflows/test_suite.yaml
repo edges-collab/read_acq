@@ -2,14 +2,11 @@ name: Tests
 
 # Test on all pushes, except when the push is literally just a tag (because we
 # tag automatically via CI, and therefore there's no extra code in that push).
-# Also, only test on pull requests into master.
 on:
   push:
     tags-ignore:
       - 'v*'
   pull_request:
-    branches:
-      - 'main'
 
 jobs:
   tests:
@@ -23,11 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: [3.8, 3.9, '3.10']
+        python-version: [3.8, 3.9, "3.10"]
     steps:
       - uses: actions/checkout@master
         with:
-          fetch-depth: 1
+          fetch-depth: 0
       - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
@@ -39,9 +36,49 @@ jobs:
           pip install .[dev]
       - name: Run Tests
         run: |
-          python -m pytest --cov=read_acq --cov-config=.coveragerc --cov-report xml:./coverage.xml --durations=25
-      - uses: codecov/codecov-action@master
-        if: matrix.os == 'ubuntu-latest' && success()
+          python -m pytest --cov-config=.coveragerc --durations=25
+  downstream:
+    env:
+      PYTHON: 3.8
+      OS: ubuntu-latest
+    name: Downstream
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ['edges-io', 'edges-cal','edges-analysis']
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@master
         with:
-          token: ${{secrets.CODECOV_TOKEN}} #required
-          file: ./coverage.xml #optional
+          fetch-depth: 0
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.PYTHON }}
+      - name: set PY
+        run: echo "PY=$(python -c 'import hashlib, sys;print(hashlib.sha256(sys.version.encode()+sys.executable.encode()).hexdigest())')" >> $GITHUB_ENV
+      - name: Setup Environment
+        run: |
+          pip install -U coverage
+          pip install .[dev]
+      - name: Get downstream package
+        run: |
+          cd ..
+          git clone https://github.com/edges-collab/${{ matrix.package }}
+          cd ${{ matrix.package }}
+          pip install .[dev]
+      - name: Install ipykernel
+        if: matrix.package == 'edges-cal'
+        run: python -m ipykernel install --user --name edges --display-name "edges"
+      - name: Print Versions
+        run: pip freeze | grep "edges-"
+      - name: Run Tests
+        run: |
+          cd ../${{ matrix.package }}
+          python -m pytest --cov-config=../read_acq/.coveragerc
+
+  codecov:
+    needs: [downstream, tests]
+    name: Codecov Reporting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: codecov/codecov-action@v2
