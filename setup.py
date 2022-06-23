@@ -12,9 +12,7 @@ setup(
             "read_acq.decode",
             ["src/read_acq/decode.c"],
             extra_compile_args=["-Ofast", "-Wall"],
-            libraries=[
-                "m",
-            ],
+            libraries=["m"],
         ),
     ],
 )
