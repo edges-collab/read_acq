@@ -36,7 +36,15 @@ jobs:
           pip install .[dev]
       - name: Run Tests
         run: |
-          python -m pytest --cov-config=.coveragerc --durations=25
+          coverage run --parallel-mode -m pytest
+
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-data
+          path: ".coverage.*"
+          if-no-files-found: error
+
   downstream:
     env:
       PYTHON: 3.8
@@ -71,14 +79,46 @@ jobs:
         run: python -m ipykernel install --user --name edges --display-name "edges"
       - name: Print Versions
         run: pip freeze | grep -E "edges-|read_acq"
+
       - name: Run Tests
         run: |
-          cd ../${{ matrix.package }}
-          python -m pytest --cov-config=../read_acq/.coveragerc
+          coverage run --parallel-mode -m pytest ../${{ matrix.package}}
+
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-data
+          path: ".coverage.*"
+          if-no-files-found: error
 
   codecov:
     needs: [downstream, tests]
     name: Codecov Reporting
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+
+      - name: Download coverage data.
+        uses: actions/download-artifact@v3
+        with:
+          name: coverage-data
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install coverage
+        run: pip install coverage
+
+      - run: pip install .[dev]
+
+      - name: Combine/Report
+        run: |
+          coverage combine
+          coverage xml
+
       - uses: codecov/codecov-action@v2
+        with:
+          fail_ci_if_error: true
+          verbose: true
+          file: ./coverage.xml

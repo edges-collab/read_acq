@@ -2,7 +2,6 @@
 [run]
 branch = True
 source = read_acq
-parallel = True
 # omit = bad_file.py
 
 [paths]
