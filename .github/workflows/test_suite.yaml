@@ -36,7 +36,7 @@ jobs:
           pip install .[dev]
       - name: Run Tests
         run: |
-          coverage run --parallel-mode python -m pytest
+          coverage run --parallel-mode -m pytest
 
   downstream:
     env:
