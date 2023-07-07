@@ -72,11 +72,9 @@ class Ancillary:
 
         name_pattern = re.compile(r"[a-zA-Z_]+")
         with open(fname) as fl:
-
             type_order = [int, float, str]
 
             for line in fl.readlines():
-
                 if not line.startswith(self.header_char):
                     break
 
