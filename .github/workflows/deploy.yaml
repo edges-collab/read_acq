@@ -22,7 +22,7 @@ jobs:
 
       - name: Build a binary wheel
         run: |
-          python -m build .
+          python -m build -s .
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@master
