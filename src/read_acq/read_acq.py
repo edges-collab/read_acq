@@ -287,6 +287,8 @@ def decode_file(
             if len(spec) == anc.meta["nfreq"]:
                 p[switch_state][i_time] = spec
             else:
+                # We have an incomplete spectrum. Instead of just blowing up completely
+                # we just warn the user, and then return the data we do have so far.
                 warnings.warn(
                     f"File {fname} has an incomplete spectrum on line "
                     f"{jline+1}/{anc.meta['n_file_lines']} [Integration {i_time} for "
