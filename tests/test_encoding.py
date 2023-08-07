@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 
-from read_acq import convert_file, convert_h5, encode
+from read_acq import convert_file, convert_h5, decode_file, encode
 from read_acq.codec import _decode_line, _encode, _encode_line
 
 
@@ -48,6 +48,23 @@ def sample_acq_file(tmp_path_factory):
     return fname
 
 
+@pytest.fixture(scope="module")
+def incomplete_file(sample_acq_file):
+    with open(sample_acq_file) as fl:
+        lines = fl.readlines()
+    last_line = lines[-1]
+    meta, spec = last_line.split(" spectrum ")
+    spec = _decode_line(spec.lstrip())
+    spec = spec[: spec.size // 2]
+    spec = _encode_line(spec, nblk=1000)
+    lines[-1] = meta + " spectrum " + spec + "\n"
+
+    new_file = sample_acq_file.parent / "incomplete.acq"
+    with open(new_file, "w") as fl:
+        fl.writelines(lines)
+    return new_file
+
+
 def test_full_file_encode(sample_acq_file):
     with open(sample_acq_file) as fl:
         assert fl.readline() == ";--temp: 0\n"
@@ -63,3 +80,12 @@ def test_full_file_h5(sample_acq_file, tmp_path_factory):
 
     with open(new_acq) as fl:
         assert ";--temp: 0\n" in fl.readlines()[:20]
+
+
+def test_incomplete_file(incomplete_file):
+    Q, p = decode_file(incomplete_file, progress=False)
+
+    # We lost an integration!
+    for pp in p:
+        assert pp.T.shape == (4, 100)
+    assert Q.shape == (4, 100)
