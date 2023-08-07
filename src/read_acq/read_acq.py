@@ -200,6 +200,14 @@ class Ancillary:
         if swpos == 2:
             self._current_size += 1
 
+    def truncate(self, size: int | None = None):
+        """Truncate the data to a given size."""
+        if size is None:
+            size = self._current_size
+
+        for key in self.data:
+            self.data[key] = self.data[key][:size]
+
 
 def decode_file(
     fname,
@@ -234,13 +242,15 @@ def decode_file(
 
     with open(fname) as fl:
         i = 0
-        for line in tqdm.tqdm(
-            fl.readlines(),
-            disable=not progress,
-            total=anc.meta["n_file_lines"],
-            desc=f"Reading {Path(fname).name}",
-            unit="lines",
-            leave=leave_progress,
+        for jline, line in enumerate(
+            tqdm.tqdm(
+                fl.readlines(),
+                disable=not progress,
+                total=anc.meta["n_file_lines"],
+                desc=f"Reading {Path(fname).name}",
+                unit="lines",
+                leave=leave_progress,
+            )
         ):
             switch_state = i % 3
             i_time = i // 3
@@ -274,8 +284,18 @@ def decode_file(
             anc.parse_specline(line_ancillary, switch_state)
 
             # Save current spectrum into p at the right switch state
-            p[switch_state][i_time] = spec
+            if len(spec) == anc.meta["nfreq"]:
+                p[switch_state][i_time] = spec
+            else:
+                warnings.warn(
+                    f"File {fname} has an incomplete spectrum on line "
+                    f"{jline+1}/{anc.meta['n_file_lines']} [Integration {i_time} for "
+                    f"swpos {switch_state}]. Breaking read."
+                )
+                anc.truncate(i_time)
 
+                for sw in range(3):
+                    p[sw] = p[sw][:i_time]
             i += 1
 
     # Get Q ratio -- need to get this to have compatibility of output with new
