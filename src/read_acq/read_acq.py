@@ -1,6 +1,7 @@
 """Functions and classes for reading and writing the .acq format."""
 from __future__ import annotations
 
+import attrs
 import numpy as np
 import re
 import tqdm
@@ -11,53 +12,144 @@ from . import writers
 from .codec import _decode_line, _encode_line
 
 
+class ACQError(Exception):
+    """Base class for errors in the ACQ module."""
+
+
+class ACQLineError(ACQError):
+    """Error in parsing a line of an ACQ file."""
+
+
+@attrs.define()
+class CommentLine:
+    """A class for storing a comment line."""
+
+    swpos: int = attrs.field(converter=int)
+    adcmax: float = attrs.field(converter=float)
+    adcmin: float = attrs.field(converter=float)
+    temp: float = attrs.field(converter=float)
+    nblk: int = attrs.field(converter=int)
+    nspec: int = attrs.field(converter=int)
+    resolution: float = attrs.field(
+        converter=attrs.converters.optional(float), default=None
+    )
+    data_drops: int = attrs.field(
+        converter=attrs.converters.optional(int), default=None
+    )
+
+    _sw = r"swpos (?P<swpos>\d)"
+    _res = r"resolution \s*(?P<resolution>\d+(\.\d*)?|\.\d+)"
+    _acmax = r"adcmax \s*(?P<adcmax>[-+]?\d+(\.\d*)?|\.\d+)"
+    _acmin = r"adcmin \s*(?P<adcmin>[-+]?\d+(\.\d*)?|\.\d+)"
+    _temp = r"temp \s*(?P<temp>\d+) C"
+    _nblk = r"nblk \s*(?P<nblk>\d+)"
+    _nspec = r"nspec \s*(?P<nspec>\d+)"
+    _dd = r"data_drops \s*(?P<data_drops>\d+)"
+
+    pxspec = re.compile(f"# {_sw} {_res} {_acmax} {_acmin} {_temp} {_nblk} {_nspec}")
+    fastspec = re.compile(f"# {_sw} {_dd} {_acmax} {_acmin} {_temp} {_nblk} {_nspec}")
+
+    @classmethod
+    def read(cls, line, fastspec: bool | None = None):
+        """Read an ACQ comment line as a CommentLine object."""
+        line = line.strip()
+        if fastspec is False:
+            match = re.match(cls.pxspec, line)
+        elif fastspec is True:
+            match = re.match(cls.fastspec, line)
+        else:
+            match = re.match(cls.pxspec, line)
+            if match is None:
+                match = re.match(cls.fastspec, line)
+        if match is None:
+            raise ACQError(f"Could not parse line: '{line}'")
+
+        return cls(**match.groupdict())
+
+
+@attrs.define()
+class DataLine:
+    """A class for storing a data line."""
+
+    time: str = attrs.field()
+    swpos: int = attrs.field(converter=int)
+    freqmin: float = attrs.field(converter=float)
+    deltaf: float = attrs.field(converter=float)
+    freqmax: float = attrs.field(converter=float)
+    thing: float = attrs.field(converter=float)
+    spectrum: np.ndarray | None = attrs.field(default=None)
+
+    _time = r"(?P<time>\d{4}:\d{3}:\d{2}:\d{2}:\d{2})"
+    _swpos = r"(?P<swpos>\d{1})"
+    _float = r"[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?"
+    _fmin = f"(?P<freqmin>{_float})"
+    _df = f"(?P<deltaf>{_float})"
+    _fmax = f"(?P<freqmax>{_float})"
+    _last = f"(?P<thing>{_float})"
+
+    regex = re.compile(rf"{_time} {_swpos} \s*{_fmin} \s*{_df} \s*{_fmax} \s*{_last}")
+
+    @classmethod
+    def read(cls, line, read_spectrum: bool = True):
+        """Read an ACQ data line as a DataLine object."""
+        front, back = line.split(" spectrum ")
+        match = re.match(cls.regex, front)
+        if match is None:
+            raise ACQError(f"Could not parse line front-matter: {front}")
+
+        if read_spectrum:
+            spec = _decode_line(back.lstrip())
+        else:
+            spec = None
+
+        return cls(spectrum=spec, **match.groupdict())
+
+
+@attrs.define
+class DataEntry:
+    """A class for storing a data entry."""
+
+    comment: CommentLine = attrs.field()
+    data: DataLine = attrs.field()
+
+    @data.validator
+    def _check_data(self, attribute, value):
+        if value.swpos != self.comment.swpos:
+            raise ACQLineError("swpos of comment and data do not match")
+        if value.spectrum.shape[0] != self.comment.nspec:
+            raise ACQLineError("nspec and length of spectrum do not match")
+
+    @classmethod
+    def read(cls, lines):
+        """Read an ACQ data entry (two lines) as a DataEntry object."""
+        comment = CommentLine.read(lines[0])
+        data = DataLine.read(lines[1])
+        return cls(comment, data)
+
+
 class Ancillary:
     """The ancillary data of an ACQ file."""
 
     header_char = ";"
-    DTYPE = np.dtype(
-        [
-            ("adcmax", np.float32),
-            ("adcmin", np.float32),
-            ("times", "S17"),
-        ]
-    )
 
     _splits = re.compile(r"[\d\.:]+")
+    DTYPES = {
+        "adcmax": np.float32,
+        "adcmin": np.float32,
+        "times": "S17",
+    }
 
     def __init__(self, fname):
         self.fastspec_version = self._get_fastspec_version(fname)
-
-        self.check_file(fname)
-
-        self.size, nlines = self.get_ntimes(fname)
-
         self.meta = self.read_metadata(fname)
 
-        self.meta["n_file_lines"] = nlines
-
         self.data = {
-            "adcmax": np.zeros((self.size, 3), dtype=np.float32),
-            "adcmin": np.zeros((self.size, 3), dtype=np.float32),
-            "times": np.zeros((self.size, 3), dtype="S17"),
+            "adcmax": [],  # np.zeros((self.size, 3), dtype=np.float32),
+            "adcmin": [],  # np.zeros((self.size, 3), dtype=np.float32),
+            "times": [],  # np.zeros((self.size, 3), dtype="S17"),
         }
         if "data_drops" in self.meta:
-            self.data["data_drops"] = np.zeros((self.size, 3), dtype=int)
-
-        self._current_size = 0
-
-    def check_file(self, fname):
-        """Check if the file is in the correct format."""
-        with open(fname) as fl:
-            cline = ""
-            while not cline.startswith("#"):
-                cline = fl.readline()
-
-        cline = self._splits.findall(cline)
-        if int(cline[0]) != 0:
-            raise OSError(
-                "The format of the ACQ file is incorrect: should start with swpos = 0"
-            )
+            self.data["data_drops"] = []  # np.zeros((self.size, 3), dtype=int)
 
     def _get_fastspec_version(self, fname):
         with open(fname) as fl:
@@ -74,7 +166,7 @@ class Ancillary:
         with open(fname) as fl:
             type_order = [int, float, str]
 
-            for line in fl.readlines():
+            for line in fl:
                 if not line.startswith(self.header_char):
                     break
 
@@ -110,27 +202,27 @@ class Ancillary:
         out = self._read_header(fname)
 
         with open(fname) as fl:
-            cline = ""
-            while not cline.startswith("#"):
-                cline = fl.readline()
-            dateline = fl.readline()
-
-        clines = self._splits.findall(cline)
-        dateline = self._splits.findall(dateline)
+            for line in fl:
+                if line.startswith("#"):
+                    comment = CommentLine.read(line)
+                    data = DataLine.read(next(fl), read_spectrum=False)
+                    break
 
         out.update(
             {
-                "data_drops"
-                if "data_drops" in clines
-                else "resolution": float(clines[1]),
-                "temperature": float(clines[4]),
-                "nblk": int(clines[5]),
-                "nfreq": int(clines[6]),
-                "freq_min": float(dateline[2]),
-                "freq_max": float(dateline[4]),
-                "freq_res": float(dateline[3]),
+                "temperature": comment.temp,
+                "nblk": comment.nblk,
+                "nfreq": comment.nspec,
+                "freq_min": data.freqmin,
+                "freq_max": data.freqmax,
+                "freq_res": data.deltaf,
             }
         )
+        if comment.resolution is not None:
+            out["resolution"] = comment.resolution
+        if comment.data_drops is not None:
+            out["data_drops"] = comment.data_drops
+
         return out
 
     @property
@@ -142,71 +234,27 @@ class Ancillary:
         # form.
         return np.arange(self.meta["freq_min"], self.meta["freq_max"], df)
 
-    def get_ntimes(self, fname):
-        """Get the number of spectra in the file."""
-        # count lines
-        ntimes = 0
-        with open(fname) as fl:
-            nlines = 0
-            for line in fl.readlines():
-                if line[0] not in "#*;" and line:
-                    ntimes += 1
-                nlines += 1
-        return ntimes // 3, nlines
+    def append(self, datas: tuple[DataEntry, DataEntry, DataEntry]):
+        """Append a set of data to the ancillary data."""
+        if tuple(d.data.swpos for d in datas) != (0, 1, 2):
+            raise ValueError(
+                "swpos of datas must be (0, 1, 2), got "
+                f"{tuple(d.data.swpos for d in datas)}"
+            )
 
-    @property
-    def times(self):
-        """The times associated with the ancillary data as datetime objects."""
-        raise NotImplementedError("We haven't done this yet.")
+        self.data["adcmax"].append([d.comment.adcmax for d in datas])
+        self.data["adcmin"].append([d.comment.adcmin for d in datas])
+        self.data["times"].append([d.data.time for d in datas])
 
-    def _add_to_self(self, add_to_self=None):
-        if add_to_self is None:
-            add_to_self = self._current_size < self.size
-        elif add_to_self and self._current_size == self.size:
-            raise ValueError("You cannot add any more lines to this object")
-        return add_to_self
+        if "data_drops" in self.meta:
+            self.data["data_drops"].append([d.comment.data_drops for d in datas])
 
-    def parse_cline(self, line, add_to_self=None):
-        """Parse a comment line and obtain metadata."""
-        add_to_self = self._add_to_self(add_to_self)
-        line = self._splits.findall(line)
-
-        if add_to_self:
-            swpos = int(line[0])
-            if "data_drops" in self.data:
-                self.data["data_drops"][self._current_size, swpos] = line[1]
-            self.data["adcmax"][self._current_size, swpos] = line[2]
-            self.data["adcmin"][self._current_size, swpos] = line[3]
-
-        else:
-            out = {
-                "adcmax": float(line[2]),
-                "adcmin": float(line[3]),
-            }
-            if "data_drops" in self.data:
-                out["data_drops"] = int(line[1])
-            return out
-
-    def parse_specline(self, line, swpos, add_to_self=None):
-        """Parse an ancillary data line of a file."""
-        add_to_self = self._add_to_self(add_to_self)
-
-        line = self._splits.findall(line)
-
-        if not add_to_self:
-            return [line[0]] + line[2:]
-
-        self.data["times"][self._current_size, swpos] = line[0]
-        if swpos == 2:
-            self._current_size += 1
-
-    def truncate(self, size: int | None = None):
-        """Truncate the data to a given size."""
-        if size is None:
-            size = self._current_size
-
+    def complete(self):
+        """Convert the ancillary data to numpy arrays."""
         for key in self.data:
-            self.data[key] = self.data[key][:size]
+            self.data[key] = np.array(
+                self.data[key], dtype=self.DTYPES.get(key, np.float32)
+            )
 
 
 def decode_file(
@@ -232,84 +280,79 @@ def decode_file(
         Useful to set to False if reading multiple files.
     """
     anc = Ancillary(fname)
-    n_times = anc.size
 
-    p = [
-        np.empty((n_times, anc.meta["nfreq"])),
-        np.empty((n_times, anc.meta["nfreq"])),
-        np.empty((n_times, anc.meta["nfreq"])),
-    ]
+    fastspec = "data_drops" in anc.meta
+
+    p0, p1, p2 = [], [], []
 
     with open(fname) as fl:
-        i = 0
-        for jline, line in enumerate(
-            tqdm.tqdm(
-                fl.readlines(),
-                disable=not progress,
-                total=anc.meta["n_file_lines"],
-                desc=f"Reading {Path(fname).name}",
-                unit="lines",
-                leave=leave_progress,
-            )
-        ):
-            switch_state = i % 3
-            i_time = i // 3
+        # First find the first swpos=0 line.
 
-            # Break when we hit the last "2" switch state (there may be a
-            # dangling 0 and 1)
-            if i_time == n_times:
+        for line in fl:
+            if line.startswith("#"):
+                cline = CommentLine.read(line, fastspec=fastspec)
+                if cline.swpos == 0:
+                    break
+
+        data = DataLine.read(next(fl))
+        data = DataEntry(comment=cline, data=data)
+
+        datas = (data,)
+        for line in tqdm.tqdm(
+            fl,
+            disable=not progress,
+            desc=f"Reading {Path(fname).name}",
+            unit="lines",
+            leave=leave_progress,
+        ):
+            cline = CommentLine.read(line, fastspec=fastspec)
+            try:
+                data = DataLine.read(next(fl))
+            except StopIteration:
+                # We reached the end of the file.
                 break
 
-            if not line.strip() or line[0] in "*;":  # Empty line.
-                continue
-
-            if line.startswith("#"):  # comment line
-                anc.parse_cline(line)
-                continue
-
             try:
-                line_ancillary, data_string = line.split("spectrum")
-            except ValueError:
-                # Uh-oh, we probably have an incomplete file.
-                raise Exception(
-                    "Formatting of ACQ file is incorrect on line starting\n{}".format(
-                        line[:50]
-                    )
-                )
+                data = DataEntry(comment=cline, data=data)
+            except ACQLineError as e:
+                warnings.warn(str(e))
+                datas = ()
+                continue
 
-            # Read the spectrum
-            spec = _decode_line(data_string.lstrip())
-
-            # Parse ancillary data
-            anc.parse_specline(line_ancillary, switch_state)
-
-            # Save current spectrum into p at the right switch state
-            if len(spec) == anc.meta["nfreq"]:
-                p[switch_state][i_time] = spec
+            if data.comment.swpos == len(datas):
+                # Add this to the cycle
+                datas += (data,)
+            elif data.comment.swpos == 0:
+                # Discard the previous cycle and start again -- it was incomplete.
+                datas = (data,)
             else:
-                # We have an incomplete spectrum. Instead of just blowing up completely
-                # we just warn the user, and then return the data we do have so far.
-                warnings.warn(
-                    f"File {fname} has an incomplete spectrum on line "
-                    f"{jline+1}/{anc.meta['n_file_lines']} [Integration {i_time} for "
-                    f"swpos {switch_state}]. Breaking read."
-                )
-                anc.truncate(i_time)
+                # Discard everything and keep going.
+                datas = ()
+                continue
 
-                for sw in range(3):
-                    p[sw] = p[sw][:i_time]
-            i += 1
+            if data.comment.swpos == 2:
+                # We have a full cycle
+                p0.append(datas[0].data.spectrum)
+                p1.append(datas[1].data.spectrum)
+                p2.append(datas[2].data.spectrum)
+                anc.append(datas)
+                datas = ()
+
+    anc.complete()
+    p0 = np.array(p0)
+    p1 = np.array(p1)
+    p2 = np.array(p2)
 
     # Get Q ratio -- need to get this to have compatibility of output with new
     # fastspec default output (HDF5).
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        Q = (p[0] - p[1]) / (p[2] - p[1])
+        Q = (p0 - p1) / (p2 - p1)
 
     if meta:
-        return Q.T, [pp.T for pp in p], anc
+        return Q.T, [p0.T, p1.T, p2.T], anc
     else:
-        return Q, [pp.T for pp in p]
+        return Q, [p0.T, p1.T, p2.T]
 
 
 def decode_files(files, *args, **kwargs):
@@ -357,7 +400,7 @@ def convert_file(
         time_data=anc.data,
         freqs=anc.frequencies,
         fastspec_version=anc.fastspec_version,
-        size=anc.size,
+        size=len(anc.data["adcmax"]),
         **{f"p{i}": p[i] for i in range(3)},
     )
     return Q, p, anc
@@ -407,7 +450,7 @@ def encode(
                 )
                 fl.write(
                     f"# swpos {switch} "
-                    f"data_drops\t{dd} "
+                    f"data_drops {dd:>4} "
                     f"adcmax  {ancillary['adcmax'][i, switch]} "
                     f"adcmin {ancillary['adcmin'][i, switch]} "
                     f"temp  {meta['temp']} C "
@@ -420,7 +463,7 @@ def encode(
                     time = time[switch]
 
                 fl.write(
-                    f"{time} {switch}\t{meta['freq_min']}  "
+                    f"{time} {switch} {meta['freq_min']}  "
                     f"{meta['freq_res']}  {meta['freq_max']}  "
                     f"0.3 spectrum "
                 )

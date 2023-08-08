@@ -41,7 +41,7 @@ def sample_acq_file(tmp_path_factory):
         "adcmin": np.ones((10, 3)) * 0.2,
         "adcmax": np.ones((10, 3)) * 0.3,
         "data_drops": np.zeros((10, 3), dtype=int),
-        "times": np.array(["time"] * 10),
+        "times": np.array(["2016:080:01:01:01"] * 10),
     }
 
     encode(fname, data, meta, ancillary)
