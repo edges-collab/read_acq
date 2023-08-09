@@ -116,14 +116,14 @@ class DataEntry:
     def _check_data(self, attribute, value):
         if value.swpos != self.comment.swpos:
             raise ACQLineError("swpos of comment and data do not match")
-        if value.spectrum.shape[0] != self.comment.nspec:
+        if value.spectrum is not None and value.spectrum.shape[0] != self.comment.nspec:
             raise ACQLineError("nspec and length of spectrum do not match")
 
     @classmethod
-    def read(cls, lines):
+    def read(cls, lines, read_spectrum: bool = True) -> DataEntry:
         """Read an ACQ data entry (two lines) as a DataEntry object."""
         comment = CommentLine.read(lines[0])
-        data = DataLine.read(lines[1])
+        data = DataLine.read(lines[1], read_spectrum=read_spectrum)
         return cls(comment, data)
 
 
@@ -355,14 +355,6 @@ def decode_file(
         return Q, [p0.T, p1.T, p2.T]
 
 
-def decode_files(files, *args, **kwargs):
-    """Call :func:`decode_file` on a list of files."""
-    for fl in tqdm.tqdm(
-        files, disable=len(files) < 5, desc="Processing files", unit="files"
-    ):
-        decode_file(fl, progress=len(files) < 5, *args, **kwargs)
-
-
 def convert_file(
     fname: str | Path,
     outfile: str | None | Path = None,
@@ -479,7 +471,7 @@ def convert_h5(infile, outfile):
     """
     try:
         from edges_io.h5 import HDF5RawSpectrum
-    except ImportError:  # pragma: nocover
+    except ImportError:  # pragma: no cover
         raise ImportError(
             "To use convert_h5, you need to install edges_io or do "
             "`pip install read_acq[h5]`"
