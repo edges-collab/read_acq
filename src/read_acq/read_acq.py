@@ -92,7 +92,11 @@ class DataLine:
     @classmethod
     def read(cls, line, read_spectrum: bool = True):
         """Read an ACQ data line as a DataLine object."""
-        front, back = line.split(" spectrum ")
+        try:
+            front, back = line.split(" spectrum ")
+        except ValueError:
+            raise ACQLineError(f"Could not parse line: '{line}' -- probably incomplete")
+
         match = re.match(cls.regex, front)
         if match is None:
             raise ACQError(f"Could not parse line front-matter: {front}")
@@ -311,6 +315,12 @@ def decode_file(
             except StopIteration:
                 # We reached the end of the file.
                 break
+            except ACQLineError as e:
+                # Something was bad in this line. Remove this iteration from the data
+                # But try to keep going in the file.
+                warnings.warn(str(e))
+                datas = ()
+                continue
 
             try:
                 data = DataEntry(comment=cline, data=data)
