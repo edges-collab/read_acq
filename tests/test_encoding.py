@@ -88,6 +88,23 @@ def incomplete_file(sample_acq_file):
     return new_file
 
 
+@pytest.fixture(scope="module")
+def incomplete_specline_file(sample_acq_file):
+    with open(sample_acq_file) as fl:
+        lines = fl.readlines()
+    last_line = lines[-1]
+    meta, spec = last_line.split(" spectrum ")
+    spec = _decode_line(spec.lstrip())
+    spec = spec[: spec.size // 2]
+    spec = _encode_line(spec, nblk=1000)
+    lines[-1] = meta + " spec"
+
+    new_file = sample_acq_file.parent / "incomplete_spec.acq"
+    with open(new_file, "w") as fl:
+        fl.writelines(lines)
+    return new_file
+
+
 def test_full_file_encode(sample_acq_file):
     with open(sample_acq_file) as fl:
         assert fl.readline() == ";--temp: 0\n"
@@ -107,6 +124,22 @@ def test_full_file_h5(sample_acq_file, tmp_path):
 
 def test_incomplete_file(incomplete_file):
     Q, p = decode_file(incomplete_file, progress=False)
+
+    # We lost an integration!
+    for pp in p:
+        assert pp.T.shape == (4, 100)
+    assert Q.shape == (4, 100)
+
+
+def test_incomplete_specline_file(incomplete_specline_file):
+    with open(incomplete_specline_file) as fl:
+        badline = fl.readlines()[-1]
+
+    with pytest.raises(ACQLineError, match="Could not parse line"):
+        DataLine.read(badline, read_spectrum=True)
+
+    with pytest.warns(UserWarning, match="Could not parse line"):
+        Q, p = decode_file(incomplete_specline_file, progress=False)
 
     # We lost an integration!
     for pp in p:
