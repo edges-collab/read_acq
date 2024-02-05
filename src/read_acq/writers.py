@@ -1,4 +1,5 @@
 """Functions that write ACQ file data to different formats."""
+
 import copy
 import numpy as np
 from pathlib import Path
