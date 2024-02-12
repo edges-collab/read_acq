@@ -12,8 +12,7 @@ import attrs
 import numpy as np
 import tqdm
 
-from . import writers
-from .codec import _decode_line, _encode_line
+from .codec import _decode_line, _encode
 
 
 class ACQError(Exception):
@@ -298,7 +297,6 @@ def decode_file(
     anc = Ancillary(fname)
 
     fastspec = "data_drops" in anc.meta
-
     p0, p1, p2 = [], [], []
 
     with fname.open("r") as fl:
@@ -377,49 +375,6 @@ def decode_file(
         return q, [p0.T, p1.T, p2.T]
 
 
-def convert_file(
-    fname: str | Path,
-    outfile: str | None | Path = None,
-    write_format: str = "h5",
-    **kwargs,
-):
-    """Convert an ACQ file to a different format.
-
-    Parameters
-    ----------
-    fname
-        The filename of the ACQ file to convert.
-    outfile
-        The path to the output file. If None, save to a file of the same name (with
-        different extension) as ``fname``.
-    write_format
-        The format to write to. Options are 'h5', 'mat' and 'npz'.
-
-    Other Parameters
-    ----------------
-    All other parameters passed through to :func:`decode_file`.
-    """
-    kwargs["meta"] = True
-    if write_format not in writers._WRITERS:
-        raise ValueError(
-            f"The format '{write_format}' does not have an associated writer."
-        )
-
-    q, p, anc = decode_file(fname, **kwargs)
-
-    getattr(writers, f"_write_{write_format}")(
-        outfile=outfile or fname,
-        ancillary=anc.meta,
-        Qratio=q,
-        time_data=anc.data,
-        freqs=anc.frequencies,
-        fastspec_version=anc.fastspec_version,
-        size=len(anc.data["adcmax"]),
-        **{f"p{i}": p[i] for i in range(3)},
-    )
-    return q, p, anc
-
-
 def encode(
     filename: str | Path,
     p: list[np.ndarray],
@@ -449,6 +404,11 @@ def encode(
 
     time_has_3dim = len(ancillary["times"].shape) == 2
 
+    temperature = int(meta["temperature"])
+    nblk = meta["nblk"]
+    nfreq = meta["nfreq"]
+    meta = {k: v for k, v in meta.items() if k not in ["temperature", "nblk", "nfreq"]}
+
     with Path(filename).open("w") as fl:
         # Write the header
         for k, v in meta.items():
@@ -464,17 +424,21 @@ def encode(
                 )
                 fl.write(
                     f"# swpos {switch} "
-                    f"data_drops {dd:>4} "
-                    f"adcmax  {ancillary['adcmax'][i, switch]} "
-                    f"adcmin {ancillary['adcmin'][i, switch]} "
-                    f"temp  {meta['temp']} C "
-                    f"nblk {meta['nblk']} "
-                    f"nspec {meta['nfreq']}\n"
+                    f"data_drops {int(dd):>4} "
+                    f"adcmax  {ancillary['adcmax'][i, switch]:.5f} "
+                    f"adcmin {ancillary['adcmin'][i, switch]:.5f} "
+                    f"temp  {temperature} C "
+                    f"nblk {nblk} "
+                    f"nspec {nfreq}\n"
                 )
 
                 time = ancillary["times"][i]
+
                 if time_has_3dim:
                     time = time[switch]
+
+                if isinstance(time, np.bytes_):
+                    time = time.decode()
 
                 fl.write(
                     f"{time} {switch} {meta['freq_min']}  "
@@ -482,5 +446,5 @@ def encode(
                     f"0.3 spectrum "
                 )
 
-                fl.write(_encode_line(pp, meta["nblk"]))
+                fl.write(_encode(pp))
                 fl.write("\n")

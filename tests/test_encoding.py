@@ -50,7 +50,7 @@ def sample_pxspec_acq():
 def sample_acq_file(tmp_path_factory):
     data = np.logspace(-5, -1, 1500).reshape((3, 5, 100))
     meta = {
-        "temp": 0,
+        "temperature": 0,
         "nblk": 1000,
         "nfreq": 100,
         "freq_min": 0,
@@ -107,16 +107,16 @@ def incomplete_specline_file(sample_acq_file: Path):
 
 def test_full_file_encode(sample_acq_file: Path):
     with sample_acq_file.open("r") as fl:
-        assert fl.readline() == ";--temp: 0\n"
+        assert fl.readline() == ";--freq_min: 0\n"
 
 
 def test_incomplete_file(incomplete_file: Path):
-    q, p = decode_file(incomplete_file, progress=False)
+    q, p, _ = decode_file(incomplete_file, progress=False, meta=True)
 
     # We lost an integration!
     for pp in p:
         assert pp.T.shape == (4, 100)
-    assert q.shape == (4, 100)
+    assert q.T.shape == (4, 100)
 
 
 def test_incomplete_specline_file(incomplete_specline_file: Path):
@@ -127,12 +127,12 @@ def test_incomplete_specline_file(incomplete_specline_file: Path):
         DataLine.read(badline, read_spectrum=True)
 
     with pytest.warns(UserWarning, match="Could not parse line"):
-        q, p = decode_file(incomplete_specline_file, progress=False)
+        q, p, _ = decode_file(incomplete_specline_file, progress=False, meta=True)
 
     # We lost an integration!
     for pp in p:
         assert pp.T.shape == (4, 100)
-    assert q.shape == (4, 100)
+    assert q.T.shape == (4, 100)
 
 
 @pytest.fixture(scope="module")
@@ -324,3 +324,20 @@ def test_read_file_with_incomplete_cycle_starting_bad(
     assert p[0].shape[1] == 2
     assert p[1].shape[1] == 2
     assert p[2].shape[1] == 2
+
+
+def test_roundtrip_on_file(sample_acq: Path, tmp_path: Path):
+    q, p, anc = decode_file(sample_acq, meta=True)
+    print(anc.data["data_drops"].shape)
+    encode(
+        tmp_path / "newfile.acq",
+        p=[pp.T for pp in p],
+        meta=anc.meta,
+        ancillary=anc.data,
+    )
+    _q, _p, _anc = decode_file(tmp_path / "newfile.acq", meta=True)
+
+    np.testing.assert_allclose(
+        q, _q, rtol=3e-2
+    )  # TODO: only this high because of MacOS
+    np.testing.assert_allclose(p, _p, rtol=3e-2)

@@ -2,10 +2,10 @@
 
 import contextlib
 
-__all__ = ["convert_file", "decode_file", "encode"]
+__all__ = ["decode_file", "encode"]
 from pkg_resources import DistributionNotFound, get_distribution
 
-from .read_acq import convert_file, decode_file, encode
+from .read_acq import decode_file, encode
 
 with contextlib.suppress(DistributionNotFound):
     __version__ = get_distribution(__name__).version
