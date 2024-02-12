@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import attrs
-import numpy as np
+import contextlib
 import re
-import tqdm
 import warnings
 from pathlib import Path
+from typing import ClassVar
+
+import attrs
+import numpy as np
+import tqdm
 
 from . import writers
 from .codec import _decode_line, _encode_line
@@ -96,17 +99,15 @@ class DataLine:
         try:
             front, back = line.split(" spectrum ")
         except ValueError:
-            raise ACQLineError(f"Could not parse line: '{line}' -- probably incomplete")
+            raise ACQLineError(
+                "Could not parse line: '{line}' -- probably incomplete"
+            ) from None
 
         match = re.match(cls.regex, front)
         if match is None:
             raise ACQError(f"Could not parse line front-matter: {front}")
 
-        if read_spectrum:
-            spec = _decode_line(back.lstrip())
-        else:
-            spec = None
-
+        spec = _decode_line(back.lstrip()) if read_spectrum else None
         return cls(spectrum=spec, **match.groupdict())
 
 
@@ -138,13 +139,14 @@ class Ancillary:
     header_char = ";"
 
     _splits = re.compile(r"[\d\.:]+")
-    DTYPES = {
+    DTYPES: ClassVar = {
         "adcmax": np.float32,
         "adcmin": np.float32,
         "times": "S17",
     }
 
-    def __init__(self, fname):
+    def __init__(self, fname: str | Path):
+        fname = Path(fname)
         self.fastspec_version = self._get_fastspec_version(fname)
         self.meta = self.read_metadata(fname)
 
@@ -156,19 +158,19 @@ class Ancillary:
         if "data_drops" in self.meta:
             self.data["data_drops"] = []  # np.zeros((self.size, 3), dtype=int)
 
-    def _get_fastspec_version(self, fname):
-        with open(fname) as fl:
+    def _get_fastspec_version(self, fname: Path):
+        with fname.open("r") as fl:
             first_line = fl.readline()
         if first_line.startswith(self.header_char):
             return first_line.split("FASTSPEC")[-1]
         else:
             return None
 
-    def _read_header(self, fname):
+    def _read_header(self, fname: Path):
         out = {}
 
         name_pattern = re.compile(r"[a-zA-Z_]+")
-        with open(fname) as fl:
+        with fname.open("r") as fl:
             type_order = [int, float, str]
 
             for line in fl:
@@ -182,7 +184,9 @@ class Ancillary:
                     try:
                         name, val = line.split(": ")
                     except ValueError:
-                        warnings.warn(f"In file {fname}, item {line} has no value")
+                        warnings.warn(
+                            f"In file {fname}, item {line} has no value", stacklevel=1
+                        )
                         name = line.split(":")[0]
                         val = ""
 
@@ -193,20 +197,18 @@ class Ancillary:
                         out[name] = tp(val.split()[0])
                         break
                     except IndexError:
-                        try:
+                        with contextlib.suppress(ValueError):
                             out[name] = tp(val)
-                        except ValueError:
-                            pass
                     except ValueError:
                         pass
 
         return out
 
-    def read_metadata(self, fname):
+    def read_metadata(self, fname: Path):
         """Read the metadata of the ACQ file."""
         out = self._read_header(fname)
 
-        with open(fname) as fl:
+        with fname.open("r") as fl:
             for line in fl:
                 if line.startswith("#"):
                     comment = CommentLine.read(line)
@@ -288,17 +290,18 @@ def decode_file(
     if not meta:
         warnings.warn(
             "The 'meta' option has been deprecated, and in a future version it will "
-            "always be True. Set to True to avoid this warning, and update your code."
+            "always be True. Set to True to avoid this warning, and update your code.",
+            stacklevel=2,
         )
         meta = False
-
+    fname = Path(fname)
     anc = Ancillary(fname)
 
     fastspec = "data_drops" in anc.meta
 
     p0, p1, p2 = [], [], []
 
-    with open(fname) as fl:
+    with fname.open("r") as fl:
         # First find the first swpos=0 line.
 
         for line in fl:
@@ -327,14 +330,14 @@ def decode_file(
             except ACQLineError as e:
                 # Something was bad in this line. Remove this iteration from the data
                 # But try to keep going in the file.
-                warnings.warn(str(e))
+                warnings.warn(str(e), stacklevel=1)
                 datas = ()
                 continue
 
             try:
                 data = DataEntry(comment=cline, data=data)
             except ACQLineError as e:
-                warnings.warn(str(e))
+                warnings.warn(str(e), stacklevel=1)
                 datas = ()
                 continue
 
@@ -366,12 +369,12 @@ def decode_file(
     # fastspec default output (HDF5).
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        Q = (p0 - p1) / (p2 - p1)
+        q = (p0 - p1) / (p2 - p1)
 
     if meta:
-        return Q.T, [p0.T, p1.T, p2.T], anc
+        return q.T, [p0.T, p1.T, p2.T], anc
     else:
-        return Q, [p0.T, p1.T, p2.T]
+        return q, [p0.T, p1.T, p2.T]
 
 
 def convert_file(
@@ -402,19 +405,19 @@ def convert_file(
             f"The format '{write_format}' does not have an associated writer."
         )
 
-    Q, p, anc = decode_file(fname, **kwargs)
+    q, p, anc = decode_file(fname, **kwargs)
 
     getattr(writers, f"_write_{write_format}")(
         outfile=outfile or fname,
         ancillary=anc.meta,
-        Qratio=Q,
+        Qratio=q,
         time_data=anc.data,
         freqs=anc.frequencies,
         fastspec_version=anc.fastspec_version,
         size=len(anc.data["adcmax"]),
         **{f"p{i}": p[i] for i in range(3)},
     )
-    return Q, p, anc
+    return q, p, anc
 
 
 def encode(
@@ -446,7 +449,7 @@ def encode(
 
     time_has_3dim = len(ancillary["times"].shape) == 2
 
-    with open(filename, "w") as fl:
+    with Path(filename).open("w") as fl:
         # Write the header
         for k, v in meta.items():
             fl.write(f";--{k}: {v}\n")

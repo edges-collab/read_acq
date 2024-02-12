@@ -1,10 +1,11 @@
 """Wrapper for C-code that does the encoding-decoding."""
 
 import ctypes
-import numpy as np
 from pathlib import Path
 
-cdll = Path(__file__).parent.glob("decode.*.so")[0]
+import numpy as np
+
+cdll = next(Path(__file__).parent.glob("decode.*.so"))
 cdll = ctypes.CDLL(cdll)
 
 _c_decode = cdll.decode

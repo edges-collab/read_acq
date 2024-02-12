@@ -1,8 +1,9 @@
 #! /usr/bin/env python
 """Command-Line Interface for read_acq."""
 
-import click
 import glob
+
+import click
 import tqdm
 
 from . import convert_file
@@ -31,7 +32,7 @@ def convert(infile, outfile, fmt):
     """Convert an ACQ file to a different format."""
     fls = []
     for fl in infile:
-        fls += glob.glob(fl)
+        fls += glob.glob(fl)  # noqa
     fls = list(set(fls))
 
     for fl in tqdm.tqdm(
