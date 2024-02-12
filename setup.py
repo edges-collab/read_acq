@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Install the package."""
 
-from numpy.distutils.core import Extension
+from distutils.extension import Extension
+
 from setuptools import setup
 
 setup(
