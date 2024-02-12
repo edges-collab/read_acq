@@ -1,8 +1,9 @@
-import h5py
-import numpy as np
-from click.testing import CliRunner
+"""Tests of the CLI."""
 from pathlib import Path
 
+import numpy as np
+from click.testing import CliRunner
+from pygsdata import GSData
 from read_acq import decode_file
 from read_acq.cli import convert
 
@@ -11,15 +12,10 @@ def test_convert(tmp_path_factory):
     cli = CliRunner()
 
     data = Path(__file__).parent / "data/sample.acq"
-    outfile = tmp_path_factory.mktemp("direc") / "tempfile.h5"
-
-    result = cli.invoke(convert, [str(data), "--outfile", str(outfile), "--fmt", "h5"])
+    outfile = tmp_path_factory.mktemp("direc") / "tempfile.gsh5"
+    result = cli.invoke(convert, [str(data), "--outfile", str(outfile)])
     assert result.exit_code == 0
-    print(result.output)
 
-    Q, p, meta = decode_file(data, meta=True)
-
-    with h5py.File(outfile, "r") as fl:
-        qq = fl["spectra"]["Q"][...]
-
-    assert np.allclose(qq[~np.isnan(qq)], Q[~np.isnan(Q)])
+    q, p, meta = decode_file(data, meta=True)
+    gsd = GSData.from_file(outfile)
+    assert np.allclose(gsd.data[0, 0].T, p[0])

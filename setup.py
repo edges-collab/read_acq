@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Install the package."""
 
-from setuptools import setup
+from distutils.extension import Extension
 
-from numpy.distutils.core import Extension
+from setuptools import setup
 
 setup(
     use_scm_version=True,

@@ -1,9 +1,9 @@
-import pytest
-
-import numpy as np
+"""Tests of writing ACQ files."""
 from pathlib import Path
 
-from read_acq import convert_file, convert_h5, decode_file, encode
+import numpy as np
+import pytest
+from read_acq import decode_file, encode
 from read_acq.codec import _decode_line, _encode, _encode_line
 from read_acq.read_acq import (
     ACQError,
@@ -50,7 +50,7 @@ def sample_pxspec_acq():
 def sample_acq_file(tmp_path_factory):
     data = np.logspace(-5, -1, 1500).reshape((3, 5, 100))
     meta = {
-        "temp": 0,
+        "temperature": 0,
         "nblk": 1000,
         "nfreq": 100,
         "freq_min": 0,
@@ -72,84 +72,72 @@ def sample_acq_file(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def incomplete_file(sample_acq_file):
-    with open(sample_acq_file) as fl:
+def incomplete_file(sample_acq_file: Path):
+    with sample_acq_file.open("r") as fl:
         lines = fl.readlines()
     last_line = lines[-1]
     meta, spec = last_line.split(" spectrum ")
     spec = _decode_line(spec.lstrip())
     spec = spec[: spec.size // 2]
     spec = _encode_line(spec, nblk=1000)
-    lines[-1] = meta + " spectrum " + spec + "\n"
+    lines[-1] = f"{meta} spectrum {spec}" + "\n"
 
     new_file = sample_acq_file.parent / "incomplete.acq"
-    with open(new_file, "w") as fl:
+    with new_file.open("w") as fl:
         fl.writelines(lines)
     return new_file
 
 
 @pytest.fixture(scope="module")
-def incomplete_specline_file(sample_acq_file):
-    with open(sample_acq_file) as fl:
+def incomplete_specline_file(sample_acq_file: Path):
+    with sample_acq_file.open("r") as fl:
         lines = fl.readlines()
     last_line = lines[-1]
     meta, spec = last_line.split(" spectrum ")
     spec = _decode_line(spec.lstrip())
     spec = spec[: spec.size // 2]
     spec = _encode_line(spec, nblk=1000)
-    lines[-1] = meta + " spec"
+    lines[-1] = f"{meta} spec"
 
     new_file = sample_acq_file.parent / "incomplete_spec.acq"
-    with open(new_file, "w") as fl:
+    with new_file.open("w") as fl:
         fl.writelines(lines)
     return new_file
 
 
-def test_full_file_encode(sample_acq_file):
-    with open(sample_acq_file) as fl:
-        assert fl.readline() == ";--temp: 0\n"
+def test_full_file_encode(sample_acq_file: Path):
+    with sample_acq_file.open("r") as fl:
+        assert fl.readline() == ";--freq_min: 0\n"
 
 
-def test_full_file_h5(sample_acq_file, tmp_path):
-    h5_file = tmp_path / "tempfile.h5"
-    convert_file(sample_acq_file, outfile=h5_file)
-
-    new_acq = tmp_path / "tempfile_roundtrip.acq"
-    # Now convert back to .acq
-    convert_h5(h5_file, new_acq)
-
-    with open(new_acq) as fl:
-        assert ";--temp: 0\n" in fl.readlines()[:20]
-
-
-def test_incomplete_file(incomplete_file):
-    Q, p = decode_file(incomplete_file, progress=False)
+def test_incomplete_file(incomplete_file: Path):
+    q, p, _ = decode_file(incomplete_file, progress=False, meta=True)
 
     # We lost an integration!
     for pp in p:
         assert pp.T.shape == (4, 100)
-    assert Q.shape == (4, 100)
+    assert q.T.shape == (4, 100)
 
 
-def test_incomplete_specline_file(incomplete_specline_file):
-    with open(incomplete_specline_file) as fl:
+def test_incomplete_specline_file(incomplete_specline_file: Path):
+    with incomplete_specline_file.open("r") as fl:
         badline = fl.readlines()[-1]
 
     with pytest.raises(ACQLineError, match="Could not parse line"):
         DataLine.read(badline, read_spectrum=True)
 
     with pytest.warns(UserWarning, match="Could not parse line"):
-        Q, p = decode_file(incomplete_specline_file, progress=False)
+        q, p, _ = decode_file(incomplete_specline_file, progress=False, meta=True)
 
     # We lost an integration!
     for pp in p:
         assert pp.T.shape == (4, 100)
-    assert Q.shape == (4, 100)
+    assert q.T.shape == (4, 100)
 
 
 @pytest.fixture(scope="module")
-def pxspec_comment_line():
-    """A real comment-line from a pxspec-output file.
+def pxspec_comment_line() -> str:
+    """Return a real comment-line from a pxspec-output file.
 
     Taken from /data5/edges/data/2014_February_Boolardy/mro/low/2016/2016_250_02.acq
     """
@@ -160,8 +148,8 @@ def pxspec_comment_line():
 
 
 @pytest.fixture(scope="module")
-def data_line_prefix():
-    """A real data-line prefix from a pxspec-output file.
+def data_line_prefix() -> str:
+    """Return a real data-line prefix from a pxspec-output file.
 
     Doesn't include the actual spectrum here.
     Taken from /data5/edges/data/2014_February_Boolardy/mro/low/2016/2016_250_02.acq
@@ -172,8 +160,8 @@ def data_line_prefix():
 
 
 @pytest.fixture(scope="module")
-def fastspec_comment_line():
-    """A real comment-line from a fastspec-output file.
+def fastspec_comment_line() -> str:
+    """Return a real comment-line from a fastspec-output file.
 
     From 2014_February_Boolardy/mro/low2/2022/2022_010_16_12_17_low2.acq,
     but manually changed swpos to 1 to enable some "broken" tests below.
@@ -244,10 +232,10 @@ def test_read_data_entry_mismatching_swpos(fastspec_comment_line, data_line_pref
         DataEntry.read((fastspec_comment_line, data_line_prefix), read_spectrum=False)
 
 
-def test_read_data_entry_wrong_nspec(sample_fastspec_acq):
+def test_read_data_entry_wrong_nspec(sample_fastspec_acq: Path):
     # Get the two data-entry lines from the front of the file.
     lines = []
-    with open(sample_fastspec_acq) as fl:
+    with sample_fastspec_acq.open("r") as fl:
         for line in fl:
             if line.startswith("# "):
                 lines.append(line)
@@ -259,21 +247,19 @@ def test_read_data_entry_wrong_nspec(sample_fastspec_acq):
         DataEntry.read(lines)
 
 
-def test_ancillary_pxspec(sample_pxspec_acq):
+def test_ancillary_pxspec(sample_pxspec_acq: Path):
     anc = Ancillary(sample_pxspec_acq)
     assert anc.fastspec_version is None
     assert "data_drops" not in anc.meta
     assert anc.meta["resolution"] == 24.414
 
 
-def test_ancillary_append_bad(sample_pxspec_acq):
+def test_ancillary_append_bad(sample_pxspec_acq: Path):
     anc = Ancillary(sample_pxspec_acq)
 
     # Read first two lines of data
-    lines = []
-    with open(sample_pxspec_acq) as fl:
-        lines.append(fl.readline())
-        lines.append(fl.readline())
+    with sample_pxspec_acq.open("r") as fl:
+        lines = [fl.readline(), fl.readline()]
 
     data_entry = DataEntry.read(lines)
 
@@ -281,15 +267,15 @@ def test_ancillary_append_bad(sample_pxspec_acq):
         anc.append((data_entry,) * 3)
 
 
-def test_read_file_starting_with_swpos_1(sample_pxspec_acq, tmp_path):
-    with open(sample_pxspec_acq) as fl:
+def test_read_file_starting_with_swpos_1(sample_pxspec_acq: Path, tmp_path: Path):
+    with sample_pxspec_acq.open("r") as fl:
         lines = fl.readlines()
 
     # Put the swpos=1 lines at the start of the file.
     lines = lines[2:4] + lines
 
     new = tmp_path / "order_test.acq"
-    with open(new, "w") as fl:
+    with new.open("w") as fl:
         fl.writelines(lines)
 
     q, p = decode_file(new)
@@ -300,15 +286,15 @@ def test_read_file_starting_with_swpos_1(sample_pxspec_acq, tmp_path):
     assert p[2].shape[1] == 1
 
 
-def test_read_file_with_incomplete_cycle(sample_pxspec_acq, tmp_path):
-    with open(sample_pxspec_acq) as fl:
+def test_read_file_with_incomplete_cycle(sample_pxspec_acq: Path, tmp_path: Path):
+    with sample_pxspec_acq.open("r") as fl:
         lines = fl.readlines()
 
     # Make an imcomplete cycle in the middle.
     lines = lines + lines[:4] + lines
 
     new = tmp_path / "incomplete_test.acq"
-    with open(new, "w") as fl:
+    with new.open("w") as fl:
         fl.writelines(lines)
 
     q, p = decode_file(new)
@@ -319,15 +305,17 @@ def test_read_file_with_incomplete_cycle(sample_pxspec_acq, tmp_path):
     assert p[2].shape[1] == 2
 
 
-def test_read_file_with_incomplete_cycle_starting_bad(sample_pxspec_acq, tmp_path):
-    with open(sample_pxspec_acq) as fl:
+def test_read_file_with_incomplete_cycle_starting_bad(
+    sample_pxspec_acq: Path, tmp_path: Path
+):
+    with sample_pxspec_acq.open("r") as fl:
         lines = fl.readlines()
 
     # Make an imcomplete cycle in the middle. Now the first bad swpos is not zero.
     lines = lines + lines[2:6] + lines
 
     new = tmp_path / "incomplete_test2.acq"
-    with open(new, "w") as fl:
+    with new.open("w") as fl:
         fl.writelines(lines)
 
     q, p = decode_file(new)
@@ -336,3 +324,20 @@ def test_read_file_with_incomplete_cycle_starting_bad(sample_pxspec_acq, tmp_pat
     assert p[0].shape[1] == 2
     assert p[1].shape[1] == 2
     assert p[2].shape[1] == 2
+
+
+def test_roundtrip_on_file(sample_acq: Path, tmp_path: Path):
+    q, p, anc = decode_file(sample_acq, meta=True)
+    print(anc.data["data_drops"].shape)
+    encode(
+        tmp_path / "newfile.acq",
+        p=[pp.T for pp in p],
+        meta=anc.meta,
+        ancillary=anc.data,
+    )
+    _q, _p, _anc = decode_file(tmp_path / "newfile.acq", meta=True)
+
+    np.testing.assert_allclose(
+        q, _q, rtol=3e-2
+    )  # TODO: only this high because of MacOS
+    np.testing.assert_allclose(p, _p, rtol=3e-2)

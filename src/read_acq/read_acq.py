@@ -1,15 +1,18 @@
 """Functions and classes for reading and writing the .acq format."""
+
 from __future__ import annotations
+
+import contextlib
+import re
+import warnings
+from pathlib import Path
+from typing import ClassVar
 
 import attrs
 import numpy as np
-import re
 import tqdm
-import warnings
-from pathlib import Path
 
-from . import writers
-from .codec import _decode_line, _encode_line
+from .codec import _decode_line, _encode
 
 
 class ACQError(Exception):
@@ -95,17 +98,15 @@ class DataLine:
         try:
             front, back = line.split(" spectrum ")
         except ValueError:
-            raise ACQLineError(f"Could not parse line: '{line}' -- probably incomplete")
+            raise ACQLineError(
+                "Could not parse line: '{line}' -- probably incomplete"
+            ) from None
 
         match = re.match(cls.regex, front)
         if match is None:
             raise ACQError(f"Could not parse line front-matter: {front}")
 
-        if read_spectrum:
-            spec = _decode_line(back.lstrip())
-        else:
-            spec = None
-
+        spec = _decode_line(back.lstrip()) if read_spectrum else None
         return cls(spectrum=spec, **match.groupdict())
 
 
@@ -137,13 +138,14 @@ class Ancillary:
     header_char = ";"
 
     _splits = re.compile(r"[\d\.:]+")
-    DTYPES = {
+    DTYPES: ClassVar = {
         "adcmax": np.float32,
         "adcmin": np.float32,
         "times": "S17",
     }
 
-    def __init__(self, fname):
+    def __init__(self, fname: str | Path):
+        fname = Path(fname)
         self.fastspec_version = self._get_fastspec_version(fname)
         self.meta = self.read_metadata(fname)
 
@@ -155,19 +157,19 @@ class Ancillary:
         if "data_drops" in self.meta:
             self.data["data_drops"] = []  # np.zeros((self.size, 3), dtype=int)
 
-    def _get_fastspec_version(self, fname):
-        with open(fname) as fl:
+    def _get_fastspec_version(self, fname: Path):
+        with fname.open("r") as fl:
             first_line = fl.readline()
         if first_line.startswith(self.header_char):
             return first_line.split("FASTSPEC")[-1]
         else:
             return None
 
-    def _read_header(self, fname):
+    def _read_header(self, fname: Path):
         out = {}
 
         name_pattern = re.compile(r"[a-zA-Z_]+")
-        with open(fname) as fl:
+        with fname.open("r") as fl:
             type_order = [int, float, str]
 
             for line in fl:
@@ -181,7 +183,9 @@ class Ancillary:
                     try:
                         name, val = line.split(": ")
                     except ValueError:
-                        warnings.warn(f"In file {fname}, item {line} has no value")
+                        warnings.warn(
+                            f"In file {fname}, item {line} has no value", stacklevel=1
+                        )
                         name = line.split(":")[0]
                         val = ""
 
@@ -192,20 +196,18 @@ class Ancillary:
                         out[name] = tp(val.split()[0])
                         break
                     except IndexError:
-                        try:
+                        with contextlib.suppress(ValueError):
                             out[name] = tp(val)
-                        except ValueError:
-                            pass
                     except ValueError:
                         pass
 
         return out
 
-    def read_metadata(self, fname):
+    def read_metadata(self, fname: Path):
         """Read the metadata of the ACQ file."""
         out = self._read_header(fname)
 
-        with open(fname) as fl:
+        with fname.open("r") as fl:
             for line in fl:
                 if line.startswith("#"):
                     comment = CommentLine.read(line)
@@ -264,10 +266,10 @@ class Ancillary:
 
 
 def decode_file(
-    fname,
-    progress=True,
-    meta=False,
-    leave_progress=True,
+    fname: str | Path,
+    progress: bool = True,
+    meta: bool | None = None,
+    leave_progress: bool = True,
 ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -280,18 +282,26 @@ def decode_file(
     progress: bool, optional
         Whether to display a progress bar for the read.
     meta: bool, optional
-        Whether to output metadata for the read.
+        Whether to output metadata for the read. Deprecated, will be set to True in a
+        future version.
     leave_progress : bool, optional
         Whether to leave the progress bar (if one is used) on the screen when done.
         Useful to set to False if reading multiple files.
     """
+    if not meta:
+        warnings.warn(
+            "The 'meta' option has been deprecated, and in a future version it will "
+            "always be True. Set to True to avoid this warning, and update your code.",
+            stacklevel=2,
+        )
+        meta = False
+    fname = Path(fname)
     anc = Ancillary(fname)
 
     fastspec = "data_drops" in anc.meta
-
     p0, p1, p2 = [], [], []
 
-    with open(fname) as fl:
+    with fname.open("r") as fl:
         # First find the first swpos=0 line.
 
         for line in fl:
@@ -320,14 +330,14 @@ def decode_file(
             except ACQLineError as e:
                 # Something was bad in this line. Remove this iteration from the data
                 # But try to keep going in the file.
-                warnings.warn(str(e))
+                warnings.warn(str(e), stacklevel=1)
                 datas = ()
                 continue
 
             try:
                 data = DataEntry(comment=cline, data=data)
             except ACQLineError as e:
-                warnings.warn(str(e))
+                warnings.warn(str(e), stacklevel=1)
                 datas = ()
                 continue
 
@@ -359,55 +369,12 @@ def decode_file(
     # fastspec default output (HDF5).
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
-        Q = (p0 - p1) / (p2 - p1)
+        q = (p0 - p1) / (p2 - p1)
 
     if meta:
-        return Q.T, [p0.T, p1.T, p2.T], anc
+        return q.T, [p0.T, p1.T, p2.T], anc
     else:
-        return Q, [p0.T, p1.T, p2.T]
-
-
-def convert_file(
-    fname: str | Path,
-    outfile: str | None | Path = None,
-    write_format: str = "h5",
-    **kwargs,
-):
-    """Convert an ACQ file to a different format.
-
-    Parameters
-    ----------
-    fname
-        The filename of the ACQ file to convert.
-    outfile
-        The path to the output file. If None, save to a file of the same name (with
-        different extension) as ``fname``.
-    write_format
-        The format to write to. Options are 'h5', 'mat' and 'npz'.
-
-    Other Parameters
-    ----------------
-    All other parameters passed through to :func:`decode_file`.
-    """
-    kwargs["meta"] = True
-    if write_format not in writers._WRITERS:
-        raise ValueError(
-            f"The format '{write_format}' does not have an associated writer."
-        )
-
-    Q, p, anc = decode_file(fname, **kwargs)
-
-    getattr(writers, f"_write_{write_format}")(
-        outfile=outfile or fname,
-        ancillary=anc.meta,
-        Qratio=Q,
-        time_data=anc.data,
-        freqs=anc.frequencies,
-        fastspec_version=anc.fastspec_version,
-        size=len(anc.data["adcmax"]),
-        **{f"p{i}": p[i] for i in range(3)},
-    )
-    return Q, p, anc
+        return q, [p0.T, p1.T, p2.T]
 
 
 def encode(
@@ -439,7 +406,12 @@ def encode(
 
     time_has_3dim = len(ancillary["times"].shape) == 2
 
-    with open(filename, "w") as fl:
+    temperature = int(meta["temperature"])
+    nblk = meta["nblk"]
+    nfreq = meta["nfreq"]
+    meta = {k: v for k, v in meta.items() if k not in ["temperature", "nblk", "nfreq"]}
+
+    with Path(filename).open("w") as fl:
         # Write the header
         for k, v in meta.items():
             fl.write(f";--{k}: {v}\n")
@@ -454,17 +426,21 @@ def encode(
                 )
                 fl.write(
                     f"# swpos {switch} "
-                    f"data_drops {dd:>4} "
-                    f"adcmax  {ancillary['adcmax'][i, switch]} "
-                    f"adcmin {ancillary['adcmin'][i, switch]} "
-                    f"temp  {meta['temp']} C "
-                    f"nblk {meta['nblk']} "
-                    f"nspec {meta['nfreq']}\n"
+                    f"data_drops {int(dd):>4} "
+                    f"adcmax  {ancillary['adcmax'][i, switch]:.5f} "
+                    f"adcmin {ancillary['adcmin'][i, switch]:.5f} "
+                    f"temp  {temperature} C "
+                    f"nblk {nblk} "
+                    f"nspec {nfreq}\n"
                 )
 
                 time = ancillary["times"][i]
+
                 if time_has_3dim:
                     time = time[switch]
+
+                if isinstance(time, np.bytes_):
+                    time = time.decode()
 
                 fl.write(
                     f"{time} {switch} {meta['freq_min']}  "
@@ -472,31 +448,5 @@ def encode(
                     f"0.3 spectrum "
                 )
 
-                fl.write(_encode_line(pp, meta["nblk"]))
+                fl.write(_encode(pp))
                 fl.write("\n")
-
-
-def convert_h5(infile, outfile):
-    """Convert a HDF5 file into an ACQ file.
-
-    HDF5 file must be in the new format used by fastspec.
-    """
-    try:
-        from edges_io.h5 import HDF5RawSpectrum
-    except ImportError:  # pragma: no cover
-        raise ImportError(
-            "To use convert_h5, you need to install edges_io or do "
-            "`pip install read_acq[h5]`"
-        )
-
-    obj = HDF5RawSpectrum(infile)
-
-    p = [obj["spectra"]["p0"], obj["spectra"]["p1"], obj["spectra"]["p2"]]
-    meta = obj["meta"]
-
-    ancillary = {}
-    ancillary["adcmax"] = obj["time_ancillary"]["adcmax"]
-    ancillary["adcmin"] = obj["time_ancillary"]["adcmin"]
-    ancillary["times"] = obj["time_ancillary"]["times"]
-
-    encode(outfile, p=[pp.T for pp in p], meta=meta, ancillary=ancillary)

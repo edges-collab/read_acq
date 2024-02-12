@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: [3.8, 3.9, "3.10", "3.11"]
+        python-version: [3.9, "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@master
         with:
@@ -118,7 +118,7 @@ jobs:
           coverage combine
           coverage xml
 
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
         with:
           fail_ci_if_error: true
           verbose: true
