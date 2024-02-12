@@ -1,4 +1,5 @@
 """Wrapper for C-code that does the encoding-decoding."""
+
 import ctypes
 import glob
 import numpy as np

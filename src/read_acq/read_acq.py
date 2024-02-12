@@ -1,4 +1,5 @@
 """Functions and classes for reading and writing the .acq format."""
+
 from __future__ import annotations
 
 import attrs

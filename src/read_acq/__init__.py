@@ -1,4 +1,5 @@
 """Package providing functionality for reading .ACQ format files."""
+
 from pkg_resources import DistributionNotFound, get_distribution
 
 from . import codec, writers
