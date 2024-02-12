@@ -1,13 +1,11 @@
 """Wrapper for C-code that does the encoding-decoding."""
 
 import ctypes
-import glob
-import numpy as np
-import os
+from pathlib import Path
 
-cdll = glob.glob(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode.*.so")
-)[0]
+import numpy as np
+
+cdll = next(Path(__file__).parent.glob("decode.*.so"))
 cdll = ctypes.CDLL(cdll)
 
 _c_decode = cdll.decode
@@ -26,7 +24,7 @@ _c_encode.argtypes = [
 ]
 
 
-def _decode_line(line):
+def _decode_line(line: str) -> np.ndarray:
     """
     Decode a pre-parsed line of an ACQ file.
 
@@ -48,12 +46,12 @@ def _decode_line(line):
     res = _c_decode(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out))
 
     if res:
-        raise Exception("C decoder exited with an error!")
+        raise SystemError("C decoder exited with an error!")
 
     return out
 
 
-def _encode(data):
+def _encode(data: np.ndarray) -> str:
     """Encode an array of data.
 
     This is a low-level function that takes an array of linear-scaled float data and
@@ -65,12 +63,12 @@ def _encode(data):
     res = _c_encode(len(data), data, out)
 
     if res:
-        raise Exception("C encoder exited with an error!")
+        raise SystemError("C encoder exited with an error!")
 
     return out.raw.decode("ascii")
 
 
-def _encode_line(data, nblk):
+def _encode_line(data: np.ndarray, nblk: int) -> str:
     """Encode an array of data.
 
     This takes an array of linear-scaled float data and converts it to a string of

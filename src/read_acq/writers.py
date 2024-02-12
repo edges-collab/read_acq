@@ -1,29 +1,24 @@
 """Functions that write ACQ file data to different formats."""
+from __future__ import annotations
 
-import copy
-import numpy as np
 from pathlib import Path
-from scipy import io
-from typing import Optional, Union
 
 _WRITERS = []
 
 
 def writer(func):
-    """Decorator to denote a function as a writer."""
+    """Convert a function to a writer function."""
     fmt = func.__name__.split("_")[-1]
     _WRITERS.append(fmt)
 
     def writer_wrapper(outfile=None, ancillary=None, **data):
         outfile = _get_fname(outfile, fmt)
-        print(f"Writing {outfile}...", end="", flush=True)
         func(outfile, ancillary, **data)
-        print(" done")
 
     return writer_wrapper
 
 
-def _get_fname(outfile: Optional[Union[Path, str]] = None, fmt: Optional[str] = None):
+def _get_fname(outfile: Path | str | None = None, fmt: str | None = None):
     if not outfile:
         raise Exception("You need to provide either outfile or infile!")
     outfile = Path(outfile)
@@ -32,14 +27,14 @@ def _get_fname(outfile: Optional[Union[Path, str]] = None, fmt: Optional[str] = 
 
 @writer
 def _write_h5(outfile=None, ancillary=None, **data):
-    """Writes HDF5 file exactly as FastSpec should now write it out."""
+    """Write a HDF5 file exactly as FastSpec should now write it out."""
     try:
         from edges_io.h5 import HDF5RawSpectrum
-    except ImportError:  # pragma: no cover
+    except ImportError as e:  # pragma: no cover
         raise ImportError(
             "To write to h5, you need to install edges_io or do "
             "`pip install read_acq[h5]"
-        )
+        ) from e
 
     spectra = {
         "Q": data["Qratio"],
@@ -61,17 +56,3 @@ def _write_h5(outfile=None, ancillary=None, **data):
     )
 
     obj.write(outfile)
-
-
-@writer
-def _write_npz(outfile=None, ancillary=None, **data):
-    data = copy.deepcopy(data)
-    data.update(ancillary)
-    np.savez(outfile, **data)
-
-
-@writer
-def _write_mat(outfile=None, ancillary=None, **data):
-    data = copy.deepcopy(data)
-    data.update(ancillary)
-    io.savemat(outfile, data)

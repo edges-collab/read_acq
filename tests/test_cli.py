@@ -1,8 +1,9 @@
+"""Tests of the CLI."""
+from pathlib import Path
+
 import h5py
 import numpy as np
 from click.testing import CliRunner
-from pathlib import Path
-
 from read_acq import decode_file
 from read_acq.cli import convert
 
@@ -17,9 +18,9 @@ def test_convert(tmp_path_factory):
     assert result.exit_code == 0
     print(result.output)
 
-    Q, p, meta = decode_file(data, meta=True)
+    q, p, meta = decode_file(data, meta=True)
 
     with h5py.File(outfile, "r") as fl:
         qq = fl["spectra"]["Q"][...]
 
-    assert np.allclose(qq[~np.isnan(qq)], Q[~np.isnan(Q)])
+    assert np.allclose(qq[~np.isnan(qq)], q[~np.isnan(q)])
