@@ -263,10 +263,10 @@ class Ancillary:
 
 
 def decode_file(
-    fname,
-    progress=True,
-    meta=False,
-    leave_progress=True,
+    fname: str | Path,
+    progress: bool = True,
+    meta: bool | None = None,
+    leave_progress: bool = True,
 ):
     """
     Parse and decode an ACQ file, optionally writing it to a new format.
@@ -279,11 +279,19 @@ def decode_file(
     progress: bool, optional
         Whether to display a progress bar for the read.
     meta: bool, optional
-        Whether to output metadata for the read.
+        Whether to output metadata for the read. Deprecated, will be set to True in a
+        future version.
     leave_progress : bool, optional
         Whether to leave the progress bar (if one is used) on the screen when done.
         Useful to set to False if reading multiple files.
     """
+    if not meta:
+        warnings.warn(
+            "The 'meta' option has been deprecated, and in a future version it will "
+            "always be True. Set to True to avoid this warning, and update your code."
+        )
+        meta = False
+
     anc = Ancillary(fname)
 
     fastspec = "data_drops" in anc.meta
@@ -473,29 +481,3 @@ def encode(
 
                 fl.write(_encode_line(pp, meta["nblk"]))
                 fl.write("\n")
-
-
-def convert_h5(infile, outfile):
-    """Convert a HDF5 file into an ACQ file.
-
-    HDF5 file must be in the new format used by fastspec.
-    """
-    try:
-        from edges_io.h5 import HDF5RawSpectrum
-    except ImportError:  # pragma: no cover
-        raise ImportError(
-            "To use convert_h5, you need to install edges_io or do "
-            "`pip install read_acq[h5]`"
-        )
-
-    obj = HDF5RawSpectrum(infile)
-
-    p = [obj["spectra"]["p0"], obj["spectra"]["p1"], obj["spectra"]["p2"]]
-    meta = obj["meta"]
-
-    ancillary = {}
-    ancillary["adcmax"] = obj["time_ancillary"]["adcmax"]
-    ancillary["adcmin"] = obj["time_ancillary"]["adcmin"]
-    ancillary["times"] = obj["time_ancillary"]["times"]
-
-    encode(outfile, p=[pp.T for pp in p], meta=meta, ancillary=ancillary)
