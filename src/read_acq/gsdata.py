@@ -11,7 +11,7 @@ from astropy.time import Time
 from pygsdata import GSData
 from pygsdata.constants import KNOWN_LOCATIONS
 
-from .read_acq import ACQError, decode_file
+from .read_acq import ACQError, decode_file, encode
 
 
 def read_acq_to_gsdata(
@@ -84,3 +84,43 @@ def read_acq_to_gsdata(
         name=name,
         **kwargs,
     )
+
+
+def write_gsdata_to_acq(
+    gsdata: GSData,
+    outfile: str | Path,
+    temperature: float = 25.0,
+    nblk: int = 2974,
+):
+    """Write a GSData object to an ACQ file.
+
+    Parameters
+    ----------
+    gsdata : GSData
+        The data to write.
+    outfile : str or Path
+        The file to write to.
+    temperature : float
+        The temperature of the system, in Celsius.
+    nblk : int
+        The number of blocks in the data.
+    """
+    if gsdata.nloads != 3:
+        raise ValueError("Can only encode 3-load data to ACQ file.")
+
+    ancillary = {
+        "times": gsdata.time_array.strftime("%Y:%j:%H:%M:%S"),
+        "adcmax": gsdata.auxiliary_measurements["adcmax"],
+        "adcmin": gsdata.auxiliary_measurements["adcmin"],
+    }
+
+    meta = {
+        "temperature": temperature,
+        "nblk": nblk,
+        "nfreq": len(gsdata.freq_array),
+        "freq_min": gsdata.freq_array.min().to_value("MHz"),
+        "freq_max": gsdata.freq_array.max().to_value("MHz"),
+        "freq_res": (gsdata.freq_array[1] - gsdata.freq_array[0]).to_value("MHz"),
+    }
+
+    encode(outfile, p=gsdata.data[:, 0], meta=meta, ancillary=ancillary)

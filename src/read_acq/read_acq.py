@@ -12,7 +12,7 @@ import attrs
 import numpy as np
 import tqdm
 
-from .codec import _decode_line, _encode_line
+from .codec import _decode_line, _encode
 
 
 class ACQError(Exception):
@@ -404,6 +404,11 @@ def encode(
 
     time_has_3dim = len(ancillary["times"].shape) == 2
 
+    temperature = int(meta["temperature"])
+    nblk = meta["nblk"]
+    nfreq = meta["nfreq"]
+    meta = {k: v for k, v in meta.items() if k not in ["temperature", "nblk", "nfreq"]}
+
     with Path(filename).open("w") as fl:
         # Write the header
         for k, v in meta.items():
@@ -419,17 +424,21 @@ def encode(
                 )
                 fl.write(
                     f"# swpos {switch} "
-                    f"data_drops {dd:>4} "
-                    f"adcmax  {ancillary['adcmax'][i, switch]} "
-                    f"adcmin {ancillary['adcmin'][i, switch]} "
-                    f"temp  {meta['temp']} C "
-                    f"nblk {meta['nblk']} "
-                    f"nspec {meta['nfreq']}\n"
+                    f"data_drops {int(dd):>4} "
+                    f"adcmax  {ancillary['adcmax'][i, switch]:.5f} "
+                    f"adcmin {ancillary['adcmin'][i, switch]:.5f} "
+                    f"temp  {temperature} C "
+                    f"nblk {nblk} "
+                    f"nspec {nfreq}\n"
                 )
 
                 time = ancillary["times"][i]
+
                 if time_has_3dim:
                     time = time[switch]
+
+                if isinstance(time, np.bytes_):
+                    time = time.decode()
 
                 fl.write(
                     f"{time} {switch} {meta['freq_min']}  "
@@ -437,5 +446,5 @@ def encode(
                     f"0.3 spectrum "
                 )
 
-                fl.write(_encode_line(pp, meta["nblk"]))
+                fl.write(_encode(pp))
                 fl.write("\n")
