@@ -213,6 +213,8 @@ class Ancillary:
                     comment = CommentLine.read(line)
                     data = DataLine.read(next(fl), read_spectrum=False)
                     break
+            else:
+                raise ACQError(f"No comment line found in file {fname}.")
 
         out.update(
             {
