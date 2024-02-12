@@ -12,7 +12,6 @@ import attrs
 import numpy as np
 import tqdm
 
-from . import writers
 from .codec import _decode_line, _encode_line
 
 
@@ -298,7 +297,6 @@ def decode_file(
     anc = Ancillary(fname)
 
     fastspec = "data_drops" in anc.meta
-
     p0, p1, p2 = [], [], []
 
     with fname.open("r") as fl:
@@ -375,49 +373,6 @@ def decode_file(
         return q.T, [p0.T, p1.T, p2.T], anc
     else:
         return q, [p0.T, p1.T, p2.T]
-
-
-def convert_file(
-    fname: str | Path,
-    outfile: str | None | Path = None,
-    write_format: str = "h5",
-    **kwargs,
-):
-    """Convert an ACQ file to a different format.
-
-    Parameters
-    ----------
-    fname
-        The filename of the ACQ file to convert.
-    outfile
-        The path to the output file. If None, save to a file of the same name (with
-        different extension) as ``fname``.
-    write_format
-        The format to write to. Options are 'h5', 'mat' and 'npz'.
-
-    Other Parameters
-    ----------------
-    All other parameters passed through to :func:`decode_file`.
-    """
-    kwargs["meta"] = True
-    if write_format not in writers._WRITERS:
-        raise ValueError(
-            f"The format '{write_format}' does not have an associated writer."
-        )
-
-    q, p, anc = decode_file(fname, **kwargs)
-
-    getattr(writers, f"_write_{write_format}")(
-        outfile=outfile or fname,
-        ancillary=anc.meta,
-        Qratio=q,
-        time_data=anc.data,
-        freqs=anc.frequencies,
-        fastspec_version=anc.fastspec_version,
-        size=len(anc.data["adcmax"]),
-        **{f"p{i}": p[i] for i in range(3)},
-    )
-    return q, p, anc
 
 
 def encode(
