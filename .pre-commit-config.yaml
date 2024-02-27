@@ -31,23 +31,6 @@ repos:
     # Run the formatter.
     - id: ruff-format
 
-
-- repo: https://github.com/pre-commit/pygrep-hooks
-  rev: v1.10.0
-  hooks:
-    - id: rst-backticks
-    - id: rst-directive-colons
-    - id: rst-inline-touching-normal
-- repo: https://github.com/Lucas-C/pre-commit-hooks-markup
-  rev: v1.0.1
-  hooks:
-  - id: rst-linter
-
-- repo: https://github.com/asottile/setup-cfg-fmt
-  rev: v2.5.0
-  hooks:
-  -   id: setup-cfg-fmt
-
 - repo: https://github.com/commitizen-tools/commitizen
   rev: v3.14.1
   hooks:
