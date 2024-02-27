@@ -1,2 +1,0 @@
-Code,Name,Fixable,Preview,Linter
-COM812,missing-trailing-comma,Always,False,flake8-commas

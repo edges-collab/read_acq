@@ -1,62 +1,73 @@
 # See https://github.com/marketplace/actions/release-drafter for configuration
 categories:
   - title: ":boom: Breaking Changes"
-    label: "breaking"
+    labels:
+      - "API breaking"
   - title: ":rocket: Features"
-    label: "enhancement"
+    labels:
+      - "type: feature: ui"
+      - "type: feature: physical"
   - title: ":fire: Removals and Deprecations"
-    label: "removal"
+    labels:
+      - "type: maint: removal"
   - title: ":beetle: Fixes"
-    label: "bug"
+    labels:
+      - "type: bug"
   - title: ":racehorse: Performance"
-    label: "performance"
+    labels:
+      - "type: performance: memory"
+      - "type: performance: cpu"
+      - "type: accuracy"
   - title: ":rotating_light: Testing"
-    label: "testing"
+    labels:
+      - "type: testing"
   - title: ":construction_worker: Continuous Integration"
-    label: "ci"
+    labels:
+      - "type: ci"
   - title: ":books: Documentation"
-    label: "documentation"
+    labels:
+      - "type: maint: documentation"
   - title: ":hammer: Refactoring"
-    label: "refactoring"
+    labels:
+      - "type: maint: refactoring"
   - title: ":lipstick: Style"
-    label: "style"
+    labels:
+      - "type: maint: style"
   - title: ":package: Dependencies"
     labels:
-      - "dependencies"
-      - "build"
+      - "type: maint: dependencies"
+      - "type: maint: build"
+
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
+
 autolabeler:
-  - label: 'documentation'
+  - label: 'type: maint: documentation'
     files:
       - '*.md'
+      - '*.rst'
+      - 'docs/**/*'
     branch:
       - '/.*docs{0,1}.*/'
-  - label: 'bug'
+  - label: 'type: bug'
     branch:
       - '/fix.*/'
     title:
       - '/fix/i'
-  - label: 'enhancement'
-    branch:
-      - '/feature.*|add-.+/'
-    title:
-      - '/feat:.+|feature:.+/i'
-  - label: "removal"
+  - label: "type: maint: removal"
     title:
       - "/remove .*/i"
-  - label: "performance"
-    title:
-      - "/.* performance .*/i"
-  - label: "ci"
+  - label: "type: ci"
     files:
       - '.github/*'
       - '.pre-commit-config.yaml'
       - '.coveragrc'
-  - label: "style"
+    branch:
+      - '/pre-commit-ci-update-config/'
+  - label: "type: maint: style"
     files:
-      - ".flake8"
-  - label: "refactoring"
+      - '/pre-commit-ci-update-config/'
+  - label: "type: maint: refactoring"
     title:
       - "/.* refactor.*/i"
 
