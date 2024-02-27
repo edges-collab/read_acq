@@ -1,5 +1,9 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0", "numpy"]
+requires = [
+    "setuptools>=60",
+    "setuptools-scm>=8.0",
+    "numpy"
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
@@ -8,7 +12,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "read_acq"
 description = "Read/Write ACQ Spectrum Files"
-readme = "README.rst"
+readme = "README.md"
 authors = [
     {name="Steven Murray", email="steven.murray@sns.it"},
 ]
