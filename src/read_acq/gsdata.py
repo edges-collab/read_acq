@@ -10,10 +10,12 @@ from astropy.coordinates import EarthLocation, UnknownSiteException
 from astropy.time import Time
 from pygsdata import GSData
 from pygsdata.constants import KNOWN_LOCATIONS
+from pygsdata.readers import gsdata_reader
 
 from .read_acq import ACQError, decode_file, encode
 
 
+@gsdata_reader(select_on_read=False, formats=["acq"])
 def read_acq_to_gsdata(
     path: str | Path | Sequence[str | Path],
     telescope_location: str | EarthLocation,
