@@ -8,7 +8,7 @@ from read_acq.gsdata import read_acq_to_gsdata, write_gsdata_to_acq
 
 def test_roundtrip_gsh5(sample_acq: Path, tmp_path):
     _q, _p, _meta = decode_file(sample_acq, meta=True)
-    gsd = read_acq_to_gsdata(sample_acq, telescope_location="edges")
+    gsd = read_acq_to_gsdata(sample_acq)
     np.testing.assert_allclose(
         _q.T, (gsd.data[0, 0] - gsd.data[1, 0]) / (gsd.data[2, 0] - gsd.data[1, 0])
     )
