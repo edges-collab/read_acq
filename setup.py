@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 """Install the package."""
 
-from distutils.extension import Extension
-
-from setuptools import setup
+from setuptools import Extension, setup
 
 setup(
     use_scm_version=True,
