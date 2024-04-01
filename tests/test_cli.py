@@ -1,4 +1,5 @@
 """Tests of the CLI."""
+
 from pathlib import Path
 
 import numpy as np

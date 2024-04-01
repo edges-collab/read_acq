@@ -1,4 +1,5 @@
 """Read an ACQ file into a GSData object."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence

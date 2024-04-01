@@ -1,4 +1,5 @@
 """Tests of writing the data."""
+
 from pathlib import Path
 
 import numpy as np
