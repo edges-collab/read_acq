@@ -9,6 +9,7 @@ from astropy import units as un
 from astropy.time import Time
 from pygsdata import KNOWN_TELESCOPES, GSData, Telescope
 from pygsdata.readers import gsdata_reader
+from pygsdata.utils import time_concat
 
 from .read_acq import ACQError, decode_file, encode
 
@@ -61,7 +62,7 @@ def read_acq_to_gsdata(
         pant = np.concatenate((pant, pant_), axis=1)
         pload = np.concatenate((pload, pload_), axis=1)
         plns = np.concatenate((plns, plns_), axis=1)
-        times = np.concatenate((times, times_))
+        times = time_concat((times, times_))
         anc.data = {k: np.concatenate((v, anc_.data[k])) for k, v in anc.data.items()}
 
     if pant.size == 0:
