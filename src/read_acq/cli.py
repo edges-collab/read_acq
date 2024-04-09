@@ -29,9 +29,9 @@ main = click.Group()
     default=".",
     type=click.Path(exists=True, file_okay=False),
 )
-@click.option("--site", "--loc", default="edges", type=str)
+@click.option("--telescope", "--loc", default="edges-low", type=str)
 @click.option("-n", "--name", default="{year}_{day}", type=str)
-def convert(infile, outfile: str | None, direc: str, site: str, name: str):
+def convert(infile, outfile: str | None, direc: str, telescope: str, name: str):
     """Convert an ACQ file to a .gsh5 format file.
 
     Multiple input files can be provided, and they will be joined together in a single
@@ -49,7 +49,7 @@ def convert(infile, outfile: str | None, direc: str, site: str, name: str):
     for fl in infiles:
         fls += sorted(fl.parent.glob(fl.name))
 
-    gsd = read_acq_to_gsdata(fls, telescope_location=site, name=name)
+    gsd = read_acq_to_gsdata(fls, telescope=telescope, name=name)
     if outfile is None:
         outfile = f"{gsd.name}.gsh5"
 
