@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 """Command-Line Interface for read_acq."""
+
 from __future__ import annotations
 
 from pathlib import Path
