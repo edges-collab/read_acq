@@ -1,4 +1,5 @@
 """Read an ACQ file into a GSData object."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -6,17 +7,18 @@ from pathlib import Path
 
 import numpy as np
 from astropy import units as un
-from astropy.coordinates import EarthLocation, UnknownSiteException
 from astropy.time import Time
-from pygsdata import GSData
-from pygsdata.constants import KNOWN_LOCATIONS
+from pygsdata import KNOWN_TELESCOPES, GSData, Telescope
+from pygsdata.readers import gsdata_reader
+from pygsdata.utils import time_concat
 
 from .read_acq import ACQError, decode_file, encode
 
 
+@gsdata_reader(select_on_read=False, formats=["acq"])
 def read_acq_to_gsdata(
     path: str | Path | Sequence[str | Path],
-    telescope_location: str | EarthLocation,
+    telescope: Telescope = KNOWN_TELESCOPES["edges-low"],
     name: str = "{year}-{day}:{hour}:{minute}",
     **kwargs,
 ) -> GSData:
@@ -40,17 +42,14 @@ def read_acq_to_gsdata(
     if not all(p.exists() for p in path):
         raise FileNotFoundError(f"File {path} does not exist")
 
-    if isinstance(telescope_location, str):
+    if isinstance(telescope, str):
         try:
-            telescope_location = EarthLocation.of_site(telescope_location)
-        except UnknownSiteException as e:
-            try:
-                telescope_location = KNOWN_LOCATIONS[telescope_location]
-            except KeyError:
-                raise ValueError(
-                    "telescope_location must be an EarthLocation or a known site, "
-                    f"got {telescope_location}. Known sites are {KNOWN_LOCATIONS}."
-                ) from e
+            telescope = KNOWN_TELESCOPES[telescope]
+        except KeyError as e:
+            raise ValueError(
+                "telescope must be a Telescope or name of a KNOWN_TELESCOPE, "
+                f"got {telescope}. Known 'scopes are {KNOWN_TELESCOPES.keys()}."
+            ) from e
 
     # Read the _first_ file to get the metadata
     _, (pant, pload, plns), anc = decode_file(path[0], meta=True)
@@ -64,7 +63,7 @@ def read_acq_to_gsdata(
         pant = np.concatenate((pant, pant_), axis=1)
         pload = np.concatenate((pload, pload_), axis=1)
         plns = np.concatenate((plns, plns_), axis=1)
-        times = np.concatenate((times, times_))
+        times = time_concat((times, times_))
         anc.data = {k: np.concatenate((v, anc_.data[k])) for k, v in anc.data.items()}
 
     if pant.size == 0:
@@ -74,13 +73,13 @@ def read_acq_to_gsdata(
     name = name.format(year=year, day=day, hour=hour, minute=minute, stem=path[0].stem)
     return GSData(
         data=np.array([pant.T, pload.T, plns.T])[:, np.newaxis],
-        time_array=times,
-        freq_array=anc.frequencies * un.MHz,
+        times=times,
+        freqs=anc.frequencies * un.MHz,
         data_unit="power",
         loads=("ant", "internal_load", "internal_load_plus_noise_source"),
         auxiliary_measurements={name: anc.data[name] for name in anc.data},
         filename=path[0] if len(path) == 1 else None,
-        telescope_location=telescope_location,
+        telescope=telescope,
         name=name,
         **kwargs,
     )
@@ -109,7 +108,7 @@ def write_gsdata_to_acq(
         raise ValueError("Can only encode 3-load data to ACQ file.")
 
     ancillary = {
-        "times": gsdata.time_array.strftime("%Y:%j:%H:%M:%S"),
+        "times": gsdata.times.strftime("%Y:%j:%H:%M:%S"),
         "adcmax": gsdata.auxiliary_measurements["adcmax"],
         "adcmin": gsdata.auxiliary_measurements["adcmin"],
     }
@@ -117,10 +116,10 @@ def write_gsdata_to_acq(
     meta = {
         "temperature": temperature,
         "nblk": nblk,
-        "nfreq": len(gsdata.freq_array),
-        "freq_min": gsdata.freq_array.min().to_value("MHz"),
-        "freq_max": gsdata.freq_array.max().to_value("MHz"),
-        "freq_res": (gsdata.freq_array[1] - gsdata.freq_array[0]).to_value("MHz"),
+        "nfreq": gsdata.nfreqs,
+        "freq_min": gsdata.freqs.min().to_value("MHz"),
+        "freq_max": gsdata.freqs.max().to_value("MHz"),
+        "freq_res": (gsdata.freqs[1] - gsdata.freqs[0]).to_value("MHz"),
     }
 
     encode(outfile, p=gsdata.data[:, 0], meta=meta, ancillary=ancillary)

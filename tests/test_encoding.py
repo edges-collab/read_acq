@@ -1,4 +1,5 @@
 """Tests of writing ACQ files."""
+
 from pathlib import Path
 
 import numpy as np
