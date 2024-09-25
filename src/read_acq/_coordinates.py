@@ -38,11 +38,19 @@ def datetime_tosecs(dt: datetime):
 
 def tosecs(yr: int, day: int, hour: int, minutes: int, sec: int | float) -> int | float:
     """Convert a date-time to seconds since New Year 1970."""
+    if hasattr(yr, "__len__"):
+        if not np.all(yr == yr[0]):
+            raise NotImplementedError(
+                "Can only use tosecs() on arrays where all years are the same"
+            )
+        yr = yr[0]
+
     secs = (yr - 1970) * 31536000 + (day - 1) * 86400 + hour * 3600 + minutes * 60 + sec
+
     for i in range(1970, yr):
         if isleapyear(i):
             secs += 86400
-    return max(0, secs)
+    return secs
 
 
 def galactic_to_radec(glat: Number, glon: Number) -> tuple[Number, Number]:
