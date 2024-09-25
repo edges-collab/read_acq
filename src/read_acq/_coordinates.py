@@ -1,6 +1,6 @@
 """Functions that compute coordinates in a fast way.
 
-These functions are equivalent to those used in Alan's C code. They have essentially 
+These functions are equivalent to those used in Alan's C code. They have essentially
 just been transcripted from the C-code, and keep the same names as functions there.
 """
 
