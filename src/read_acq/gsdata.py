@@ -23,7 +23,13 @@ def fast_lst_setter(times: Time, loc: EarthLocation):
         [yd.split(":") for yd in times.yday.flatten()]
     ).T
 
-    secs = _crd.tosecs(years, days, hours, minutes, seconds)
+    secs = _crd.tosecs(
+        years.astype(int),
+        days.astype(int),
+        hours.astype(int),
+        minutes.astype(int),
+        seconds.astype(float),
+    )
     gst = _crd.gst(secs) * 12 / np.pi + loc.longitude.hour
 
     return Longitude(gst * un.hour)
