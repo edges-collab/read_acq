@@ -30,7 +30,7 @@ def fast_lst_setter(times: Time, loc: EarthLocation):
         minutes.astype(int),
         seconds.astype(float),
     )
-    gst = _crd.gst(secs) * 12 / np.pi + loc.longitude.hour
+    gst = _crd.gst(secs) * 12 / np.pi + loc.lon.hour
 
     return Longitude(gst * un.hour)
 
