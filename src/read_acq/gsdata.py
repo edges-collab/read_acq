@@ -98,7 +98,7 @@ def read_acq_to_gsdata(
     name = name.format(year=year, day=day, hour=hour, minute=minute, stem=path[0].stem)
 
     # TODO: use proper integration time...
-    time_ranges = np.array([times, times + 13 * un.s])
+    time_ranges = Time(np.array([times.jd, (times + 13 * un.s).jd]), format="jd")
 
     if lst_setter is not None:
         kwargs["lsts"] = lst_setter(times, telescope.location)
