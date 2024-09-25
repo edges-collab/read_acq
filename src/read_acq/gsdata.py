@@ -11,15 +11,25 @@ from astropy.time import Time
 from pygsdata import KNOWN_TELESCOPES, GSData, Telescope
 from pygsdata.readers import gsdata_reader
 from pygsdata.utils import time_concat
-
+from astropy.coordinates import EarthLocation, Longitude
 from .read_acq import ACQError, decode_file, encode
+from . import _coordinates as _crd
 
+def fast_lst_setter(times: Time, loc: EarthLocation):
+    """Set the LSTs for the GSData object."""
+    years, days, hours, minutes, seconds = np.array([yd.split(":") for yd in times.yday.flatten()]).T
+        
+    secs = _crd.tosecs(years, days, hours, minutes, seconds)
+    gst = _crd.gst(secs)*12/np.pi + loc.longitude.hour
+    
+    return Longitude(gst*un.hour)
 
 @gsdata_reader(select_on_read=False, formats=["acq"])
 def read_acq_to_gsdata(
     path: str | Path | Sequence[str | Path],
     telescope: Telescope = KNOWN_TELESCOPES["edges-low"],
     name: str = "{year}-{day}:{hour}:{minute}",
+    lst_setter: callable | None = None,
     **kwargs,
 ) -> GSData:
     """Read an ACQ file into a GSData object.
@@ -34,6 +44,10 @@ def read_acq_to_gsdata(
     name : str
         The name of the GSData object. Can include formatting fields for year, day,
         hour, minute and stem (the stem of the input filename).
+    lst_setter : callable, optional
+        A function that takes the astropy Time object at which the data is defined and
+        returns a set of LSTs that will be stored in the GSData object. By default, use
+        the astropy function used by pygsdata itself. Set 
     **kwargs
         Additional keyword arguments to pass to the GSData constructor.
     """
@@ -71,6 +85,14 @@ def read_acq_to_gsdata(
 
     year, day, hour, minute = times[0, 0].to_value("yday", "date_hm").split(":")
     name = name.format(year=year, day=day, hour=hour, minute=minute, stem=path[0].stem)
+    
+    # TODO: use proper integration time...
+    time_ranges = np.array([times, times + 13*un.s])
+    
+    if lst_setter is not None:
+        kwargs['lsts'] = lst_setter(times, telescope.location)
+        kwargs['lst_ranges'] = lst_setter(time_ranges, telescope.location)
+        
     return GSData(
         data=np.array([pant.T, pload.T, plns.T])[:, np.newaxis],
         times=times,
