@@ -32,7 +32,7 @@ def fast_lst_setter(times: Time, loc: EarthLocation):
     )
     gst = _crd.gst(secs) * 12 / np.pi + loc.lon.hour
 
-    return Longitude(gst * un.hour)
+    return Longitude(gst * un.hour).reshape(times.shape)
 
 
 @gsdata_reader(select_on_read=False, formats=["acq"])
