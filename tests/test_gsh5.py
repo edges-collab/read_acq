@@ -6,12 +6,15 @@ import numpy as np
 import pytest
 from pygsdata.select import select_loads
 from read_acq import decode_file
-from read_acq.gsdata import read_acq_to_gsdata, write_gsdata_to_acq
+from read_acq.gsdata import fast_lst_setter, read_acq_to_gsdata, write_gsdata_to_acq
 
 
-def test_roundtrip_gsh5(sample_acq: Path, tmp_path):
+@pytest.mark.parametrize("with_fast_lst_setter", [False, True])
+def test_roundtrip_gsh5(sample_acq: Path, tmp_path, with_fast_lst_setter):
     _q, _p, _meta = decode_file(sample_acq, meta=True)
-    gsd = read_acq_to_gsdata(sample_acq)
+    gsd = read_acq_to_gsdata(
+        sample_acq, lst_setter=fast_lst_setter if with_fast_lst_setter else None
+    )
     np.testing.assert_allclose(
         _q.T, (gsd.data[0, 0] - gsd.data[1, 0]) / (gsd.data[2, 0] - gsd.data[1, 0])
     )
