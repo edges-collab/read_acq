@@ -82,6 +82,7 @@ def read_acq_to_gsdata(
     while pant.size == 0:
         _, (pant, pload, plns), anc = decode_file(path[i], meta=True)
         times = Time(anc.data.pop("times"), format="yday", scale="utc")
+        i += 1
 
     # Concatenate all the files
     for p in path[i + 1 :]:
