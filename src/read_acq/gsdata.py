@@ -77,11 +77,14 @@ def read_acq_to_gsdata(
             ) from e
 
     # Read the _first_ file to get the metadata
-    _, (pant, pload, plns), anc = decode_file(path[0], meta=True)
-    times = Time(anc.data.pop("times"), format="yday", scale="utc")
+    pant = np.array([])
+    i = 0
+    while pant.size == 0:
+        _, (pant, pload, plns), anc = decode_file(path[i], meta=True)
+        times = Time(anc.data.pop("times"), format="yday", scale="utc")
 
     # Concatenate all the files
-    for p in path[1:]:
+    for p in path[i + 1 :]:
         _, (pant_, pload_, plns_), anc_ = decode_file(p, meta=True)
         times_ = Time(anc_.data.pop("times"), format="yday", scale="utc")
 
