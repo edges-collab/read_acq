@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
 from read_acq import decode_file, encode
 from read_acq.codec import _decode_line, _encode, _encode_line
 from read_acq.read_acq import (

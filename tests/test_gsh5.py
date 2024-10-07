@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from pygsdata.select import select_loads
+
 from read_acq import decode_file
 from read_acq.gsdata import read_acq_to_gsdata, write_gsdata_to_acq
 
