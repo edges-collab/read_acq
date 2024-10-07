@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from click.testing import CliRunner
 from pygsdata import GSData
+
 from read_acq import decode_file
 from read_acq.cli import convert
 
