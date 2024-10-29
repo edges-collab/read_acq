@@ -91,7 +91,7 @@ def galactic_to_radec(glat: Number, glon: Number) -> tuple[Number, Number]:
 
 def toyrday(secs: float) -> tuple[int, int, int, int, int]:
     """Convert Seconds to Yr/Day/Hr/Min/Sec."""
-    day = np.floor(secs / 86400.0)
+    day = int(np.floor(secs / 86400.0))
     sec = secs - day * 86400.0
     year = 1970
     while day > 365:
@@ -99,9 +99,9 @@ def toyrday(secs: float) -> tuple[int, int, int, int, int]:
         day -= days
         year += 1
 
-    hour = sec / 3600.0
+    hour = int(sec / 3600.0)
     sec -= hour * 3600.0
-    minute = sec / 60.0
+    minute = int(sec / 60.0)
     sec -= minute * 60
     day += 1
 

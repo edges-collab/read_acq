@@ -112,7 +112,7 @@ def test_full_file_encode(sample_acq_file: Path):
 
 
 def test_incomplete_file(incomplete_file: Path):
-    q, p, _ = decode_file(incomplete_file, progress=False, meta=True)
+    q, p, _ = decode_file(incomplete_file, progress=False)
 
     # We lost an integration!
     for pp in p:
@@ -128,7 +128,7 @@ def test_incomplete_specline_file(incomplete_specline_file: Path):
         DataLine.read(badline, read_spectrum=True)
 
     with pytest.warns(UserWarning, match="Could not parse line"):
-        q, p, _ = decode_file(incomplete_specline_file, progress=False, meta=True)
+        q, p, _ = decode_file(incomplete_specline_file, progress=False)
 
     # We lost an integration!
     for pp in p:
@@ -279,12 +279,13 @@ def test_read_file_starting_with_swpos_1(sample_pxspec_acq: Path, tmp_path: Path
     with new.open("w") as fl:
         fl.writelines(lines)
 
-    q, p = decode_file(new)
+    q, p, _ = decode_file(new)
+
     # we should have just one complete switch cycle
-    assert len(q) == 1
-    assert p[0].shape[1] == 1
-    assert p[1].shape[1] == 1
-    assert p[2].shape[1] == 1
+    assert q.shape == (32768, 1)
+    assert p[0].shape == (32768, 1)
+    assert p[1].shape == (32768, 1)
+    assert p[2].shape == (32768, 1)
 
 
 def test_read_file_with_incomplete_cycle(sample_pxspec_acq: Path, tmp_path: Path):
@@ -298,12 +299,12 @@ def test_read_file_with_incomplete_cycle(sample_pxspec_acq: Path, tmp_path: Path
     with new.open("w") as fl:
         fl.writelines(lines)
 
-    q, p = decode_file(new)
+    q, p, _ = decode_file(new)
     # we should have just two complete switch cycles
-    assert len(q) == 2
-    assert p[0].shape[1] == 2
-    assert p[1].shape[1] == 2
-    assert p[2].shape[1] == 2
+    assert q.shape == (32768, 2)
+    assert p[0].shape == (32768, 2)
+    assert p[1].shape == (32768, 2)
+    assert p[2].shape == (32768, 2)
 
 
 def test_read_file_with_incomplete_cycle_starting_bad(
@@ -319,16 +320,17 @@ def test_read_file_with_incomplete_cycle_starting_bad(
     with new.open("w") as fl:
         fl.writelines(lines)
 
-    q, p = decode_file(new)
+    q, p, _ = decode_file(new)
+
     # we should have just two complete switch cycles
-    assert len(q) == 2
-    assert p[0].shape[1] == 2
-    assert p[1].shape[1] == 2
-    assert p[2].shape[1] == 2
+    assert q.shape == (32768, 2)
+    assert p[0].shape == (32768, 2)
+    assert p[1].shape == (32768, 2)
+    assert p[2].shape == (32768, 2)
 
 
 def test_roundtrip_on_file(sample_acq: Path, tmp_path: Path):
-    q, p, anc = decode_file(sample_acq, meta=True)
+    q, p, anc = decode_file(sample_acq)
     print(anc.data["data_drops"].shape)
     encode(
         tmp_path / "newfile.acq",
@@ -336,7 +338,7 @@ def test_roundtrip_on_file(sample_acq: Path, tmp_path: Path):
         meta=anc.meta,
         ancillary=anc.data,
     )
-    _q, _p, _anc = decode_file(tmp_path / "newfile.acq", meta=True)
+    _q, _p, _anc = decode_file(tmp_path / "newfile.acq")
 
     np.testing.assert_allclose(
         q, _q, rtol=3e-2

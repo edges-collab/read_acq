@@ -80,13 +80,13 @@ def read_acq_to_gsdata(
     pant = np.array([])
     i = 0
     while pant.size == 0:
-        _, (pant, pload, plns), anc = decode_file(path[i], meta=True)
+        _, (pant, pload, plns), anc = decode_file(path[i])
         times = Time(anc.data.pop("times"), format="yday", scale="utc")
         i += 1
 
     # Concatenate all the files
     for p in path[i:]:
-        _, (pant_, pload_, plns_), anc_ = decode_file(p, meta=True)
+        _, (pant_, pload_, plns_), anc_ = decode_file(p)
         times_ = Time(anc_.data.pop("times"), format="yday", scale="utc")
 
         pant = np.concatenate((pant, pant_), axis=1)
