@@ -7,12 +7,32 @@ from pathlib import Path
 
 import numpy as np
 from astropy import units as un
+from astropy.coordinates import EarthLocation, Longitude
 from astropy.time import Time
 from pygsdata import KNOWN_TELESCOPES, GSData, Telescope
 from pygsdata.readers import gsdata_reader
 from pygsdata.utils import time_concat
 
+from . import _coordinates as _crd
 from .read_acq import ACQError, decode_file, encode
+
+
+def fast_lst_setter(times: Time, loc: EarthLocation):
+    """Set the LSTs for the GSData object."""
+    years, days, hours, minutes, seconds = np.array(
+        [yd.split(":") for yd in times.yday.flatten()]
+    ).T
+
+    secs = _crd.tosecs(
+        years.astype(int),
+        days.astype(int),
+        hours.astype(int),
+        minutes.astype(int),
+        seconds.astype(float),
+    )
+    gst = _crd.gst(secs) * 12 / np.pi + loc.lon.hour
+
+    return Longitude(gst * un.hour).reshape(times.shape)
 
 
 @gsdata_reader(select_on_read=False, formats=["acq"])
@@ -20,6 +40,7 @@ def read_acq_to_gsdata(
     path: str | Path | Sequence[str | Path],
     telescope: Telescope = KNOWN_TELESCOPES["edges-low"],
     name: str = "{year}-{day}:{hour}:{minute}",
+    lst_setter: callable | None = None,
     **kwargs,
 ) -> GSData:
     """Read an ACQ file into a GSData object.
@@ -34,6 +55,10 @@ def read_acq_to_gsdata(
     name : str
         The name of the GSData object. Can include formatting fields for year, day,
         hour, minute and stem (the stem of the input filename).
+    lst_setter : callable, optional
+        A function that takes the astropy Time object at which the data is defined and
+        returns a set of LSTs that will be stored in the GSData object. By default, use
+        the astropy function used by pygsdata itself. Set
     **kwargs
         Additional keyword arguments to pass to the GSData constructor.
     """
@@ -52,12 +77,16 @@ def read_acq_to_gsdata(
             ) from e
 
     # Read the _first_ file to get the metadata
-    _, (pant, pload, plns), anc = decode_file(path[0], meta=True)
-    times = Time(anc.data.pop("times"), format="yday", scale="utc")
+    pant = np.array([])
+    i = 0
+    while pant.size == 0:
+        _, (pant, pload, plns), anc = decode_file(path[i])
+        times = Time(anc.data.pop("times"), format="yday", scale="utc")
+        i += 1
 
     # Concatenate all the files
-    for p in path[1:]:
-        _, (pant_, pload_, plns_), anc_ = decode_file(p, meta=True)
+    for p in path[i:]:
+        _, (pant_, pload_, plns_), anc_ = decode_file(p)
         times_ = Time(anc_.data.pop("times"), format="yday", scale="utc")
 
         pant = np.concatenate((pant, pant_), axis=1)
@@ -71,6 +100,16 @@ def read_acq_to_gsdata(
 
     year, day, hour, minute = times[0, 0].to_value("yday", "date_hm").split(":")
     name = name.format(year=year, day=day, hour=hour, minute=minute, stem=path[0].stem)
+
+    # TODO: use proper integration time...
+    time_ranges = Time(
+        np.hstack((times.jd, (times + 13 * un.s).jd)), format="jd"
+    ).reshape((*times.shape, 2))
+
+    if lst_setter is not None:
+        kwargs["lsts"] = lst_setter(times, telescope.location)
+        kwargs["lst_ranges"] = lst_setter(time_ranges, telescope.location)
+
     return GSData(
         data=np.array([pant.T, pload.T, plns.T])[:, np.newaxis],
         times=times,
