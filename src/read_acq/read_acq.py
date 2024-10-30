@@ -268,7 +268,6 @@ class Ancillary:
 def decode_file(
     fname: str | Path,
     progress: bool = True,
-    meta: bool | None = None,
     leave_progress: bool = True,
 ):
     """
@@ -288,13 +287,6 @@ def decode_file(
         Whether to leave the progress bar (if one is used) on the screen when done.
         Useful to set to False if reading multiple files.
     """
-    if not meta:
-        warnings.warn(
-            "The 'meta' option has been deprecated, and in a future version it will "
-            "always be True. Set to True to avoid this warning, and update your code.",
-            stacklevel=2,
-        )
-        meta = False
     fname = Path(fname)
     anc = Ancillary(fname)
 
@@ -371,10 +363,7 @@ def decode_file(
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         q = (p0 - p1) / (p2 - p1)
 
-    if meta:
-        return q.T, [p0.T, p1.T, p2.T], anc
-    else:
-        return q, [p0.T, p1.T, p2.T]
+    return q.T, [p0.T, p1.T, p2.T], anc
 
 
 def encode(
