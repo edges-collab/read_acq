@@ -44,6 +44,7 @@ jobs:
           name: coverage-data-tests-${{ matrix.os }}-${{ matrix.python-version }}
           path: ".coverage.*"
           if-no-files-found: error
+          include-hidden-files: true
 
   downstream:
     env:
@@ -90,6 +91,7 @@ jobs:
           name: coverage-data-downstream-${{ matrix.package }}
           path: ".coverage.*"
           if-no-files-found: error
+          include-hidden-files: true
 
   codecov:
     needs: [downstream, tests]
