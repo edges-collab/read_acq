@@ -64,6 +64,9 @@ def read_acq_to_gsdata(
     """
     path = [Path(path)] if isinstance(path, (str, Path)) else [Path(p) for p in path]
 
+    if len(path) == 0:
+        raise ValueError("No files given to read")
+
     if not all(p.exists() for p in path):
         raise FileNotFoundError(f"File {path} does not exist")
 
@@ -77,26 +80,33 @@ def read_acq_to_gsdata(
             ) from e
 
     # Read the _first_ file to get the metadata
-    pant = np.array([])
-    i = 0
-    while pant.size == 0:
-        _, (pant, pload, plns), anc = decode_file(path[i])
-        times = Time(anc.data.pop("times"), format="yday", scale="utc")
-        i += 1
+    pants = []
+    ploads = []
+    plnss = []
+    times = []
+    ancs = []
+    for pth in path:
+        _, (pant, pload, plns), anc = decode_file(pth)
+        _times = Time(anc.data.pop("times"), format="yday", scale="utc")
 
-    # Concatenate all the files
-    for p in path[i:]:
-        _, (pant_, pload_, plns_), anc_ = decode_file(p)
-        times_ = Time(anc_.data.pop("times"), format="yday", scale="utc")
+        if pant.size == 0:
+            continue  # ignore this file, it's empty.
 
-        pant = np.concatenate((pant, pant_), axis=1)
-        pload = np.concatenate((pload, pload_), axis=1)
-        plns = np.concatenate((plns, plns_), axis=1)
-        times = time_concat((times, times_))
-        anc.data = {k: np.concatenate((v, anc_.data[k])) for k, v in anc.data.items()}
+        pants.append(pant)
+        ploads.append(pload)
+        plnss.append(plns)
+        times.append(_times)
+        ancs.append(anc)
 
-    if pant.size == 0:
+    if len(pants) == 0:
         raise ACQError(f"No data in any files: {path}")
+
+    pant = np.concatenate(pants, axis=1)
+    pload = np.concatenate(ploads, axis=1)
+    plns = np.concatenate(plnss, axis=1)
+    times = time_concat(times)
+    anc = ancs[0]
+    anc.data = {k: np.concatenate([a.data[k] for a in ancs]) for k in anc.data}
 
     year, day, hour, minute = times[0, 0].to_value("yday", "date_hm").split(":")
     name = name.format(year=year, day=day, hour=hour, minute=minute, stem=path[0].stem)
