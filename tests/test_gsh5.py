@@ -1,5 +1,6 @@
 """Tests of writing the data."""
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +9,7 @@ from pygsdata.select import select_loads
 
 from read_acq import decode_file
 from read_acq.gsdata import fast_lst_setter, read_acq_to_gsdata, write_gsdata_to_acq
+from read_acq.read_acq import ACQError
 
 
 @pytest.mark.parametrize("with_fast_lst_setter", [False, True])
@@ -53,3 +55,37 @@ def test_write_single_load(sample_acq: Path, tmp_path):
 
     with pytest.raises(ValueError, match="Can only encode 3-load data to ACQ file"):
         write_gsdata_to_acq(gsd, tmp_path / "new.acq")
+
+
+def test_no_files_given():
+    with pytest.raises(ValueError, match="No files given to read"):
+        read_acq_to_gsdata(path=[])
+
+
+def test_only_empty_files_given(sample_acq, tmp_path):
+    outpath = tmp_path / "empty.acq"
+
+    os.system(f"head -n 31 {sample_acq} > {outpath}")
+
+    gsd = read_acq_to_gsdata([sample_acq])
+
+    with pytest.raises(ACQError, match="No data in any files"):
+        read_acq_to_gsdata([outpath])
+
+    with pytest.raises(ACQError, match="No data in any files"):
+        read_acq_to_gsdata([outpath, outpath])
+
+    gsd1 = read_acq_to_gsdata([sample_acq, outpath])
+    assert gsd1.ntimes == gsd.ntimes
+
+    gsd1 = read_acq_to_gsdata([outpath, sample_acq])
+    assert gsd1.ntimes == gsd.ntimes
+
+    gsd1 = read_acq_to_gsdata([outpath, outpath, sample_acq])
+    assert gsd1.ntimes == gsd.ntimes
+
+    gsd1 = read_acq_to_gsdata([outpath, sample_acq, outpath])
+    assert gsd1.ntimes == gsd.ntimes
+
+    gsd1 = read_acq_to_gsdata([sample_acq, outpath, sample_acq])
+    assert gsd1.ntimes == gsd.ntimes * 2
