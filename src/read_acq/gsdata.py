@@ -10,6 +10,7 @@ from astropy import units as un
 from astropy.coordinates import EarthLocation, Longitude
 from astropy.time import Time
 from pygsdata import KNOWN_TELESCOPES, GSData, Telescope
+from pygsdata.history import History, Stamp
 from pygsdata.readers import gsdata_reader
 from pygsdata.utils import time_concat
 
@@ -130,6 +131,15 @@ def read_acq_to_gsdata(
         filename=path[0] if len(path) == 1 else None,
         telescope=telescope,
         name=name,
+        history=History(
+            (
+                Stamp(
+                    "Read from ACQ file",
+                    function="read_acq_to_gsdata",
+                    parameters={"path": path},
+                ),
+            ),
+        ),
         **kwargs,
     )
 
