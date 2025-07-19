@@ -2,9 +2,10 @@
 requires = [
     "setuptools>=60",
     "setuptools-scm>=8.0",
+    "meson-python",
     "numpy"
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "mesonpy"
 
 [tool.setuptools_scm]
 
