@@ -2,10 +2,15 @@
 
 import ctypes
 from pathlib import Path
+import sys
 
 import numpy as np
 
-cdll = next(Path(__file__).parent.glob("decode.*.so"))
+if sys.platform == 'win32':
+    cdll = next(Path(__file__).parent.glob("decode.*.pyd"))
+else:
+    cdll = next(Path(__file__).parent.glob("decode.*.so"))
+    
 cdll = ctypes.CDLL(cdll)
 
 _c_decode = cdll.decode
