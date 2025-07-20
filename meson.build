@@ -17,8 +17,8 @@ py.install_sources(
     [
         'src/read_acq/__init__.py',
         'src/read_acq/_coordinates.py',
-        'src/read_acq/codec.py', 
-        'src/read_acq/gsdata.py', 
+        'src/read_acq/codec.py',
+        'src/read_acq/gsdata.py',
         'src/read_acq/cli.py',
         'src/read_acq/read_acq.py',
     ],

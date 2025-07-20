@@ -1,16 +1,16 @@
 """Wrapper for C-code that does the encoding-decoding."""
 
 import ctypes
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 
-if sys.platform == 'win32':
+if sys.platform == "win32":
     cdll = next(Path(__file__).parent.glob("decode.*.pyd"))
 else:
     cdll = next(Path(__file__).parent.glob("decode.*.so"))
-    
+
 cdll = ctypes.CDLL(cdll)
 
 _c_decode = cdll.decode
