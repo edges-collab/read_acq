@@ -11,7 +11,7 @@ if sys.platform == "win32":
 else:
     cdll = next(Path(__file__).parent.glob("decode.*.so"))
 
-cdll = ctypes.CDLL(cdll)
+cdll = ctypes.CDLL(str(cdll.resolve()))
 
 _c_decode = cdll.decode
 _c_decode.restype = ctypes.c_int
