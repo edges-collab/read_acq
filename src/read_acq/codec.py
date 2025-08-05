@@ -1,12 +1,17 @@
 """Wrapper for C-code that does the encoding-decoding."""
 
 import ctypes
+import sys
 from pathlib import Path
 
 import numpy as np
 
-cdll = next(Path(__file__).parent.glob("decode.*.so"))
-cdll = ctypes.CDLL(cdll)
+if sys.platform == "win32":
+    cdll = next(Path(__file__).parent.glob("decode.*.pyd"))
+else:
+    cdll = next(Path(__file__).parent.glob("decode.*.so"))
+
+cdll = ctypes.CDLL(str(cdll.resolve()))
 
 _c_decode = cdll.decode
 _c_decode.restype = ctypes.c_int
