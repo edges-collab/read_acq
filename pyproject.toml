@@ -3,7 +3,8 @@ requires = [
     "setuptools>=60",
     "setuptools-scm>=8.0",
     "meson-python",
-    "numpy"
+    "numpy",
+    "ninja"
 ]
 build-backend = "mesonpy"
 
