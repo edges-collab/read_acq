@@ -2,9 +2,11 @@
 requires = [
     "setuptools>=60",
     "setuptools-scm>=8.0",
-    "numpy"
+    "meson-python",
+    "numpy",
+    "ninja"
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "mesonpy"
 
 [tool.setuptools_scm]
 
@@ -17,7 +19,7 @@ authors = [
     {name="Steven Murray", email="steven.murray@sns.it"},
 ]
 license = {text="MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
