@@ -7,7 +7,7 @@ jobs:
     name: Twine Check
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
           os: [ubuntu-latest, macos-latest, windows-latest]
           python-version: ["3.11", "3.12", "3.13"]
@@ -23,10 +23,10 @@ jobs:
       - name: Install Build Tools
         run: pip install build twine
 
-      - name: Sync clock
-        # Sometimes the build breaks because the files are dated in the future...
-        # See https://github.com/actions/runner/issues/2996 for context
-        run: sudo sntp -sS time.windows.com
+      # - name: Sync clock
+      #   # Sometimes the build breaks because the files are dated in the future...
+      #   # See https://github.com/actions/runner/issues/2996 for context
+      #   run: sudo sntp -sS time.windows.com
 
       - name: Build a binary wheel
         run: |
