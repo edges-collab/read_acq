@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 if sys.platform == "win32":
-    cdll = next(Path(__file__).parent.glob("decodelib.*.pyd"))
+    cdll = next(Path(__file__).parent.glob("libdecode.dll"))
 else:
     cdll = next(Path(__file__).parent.glob("libdecode.so"))
 
