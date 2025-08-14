@@ -23,6 +23,11 @@ jobs:
       - name: Install Build Tools
         run: pip install build twine
 
+      - name: Sync clock
+        # Sometimes the build breaks because the files are dated in the future...
+        # See https://github.com/actions/runner/issues/2996 for context
+        run: sudo sntp -sS time.windows.com
+
       - name: Build a binary wheel
         run: |
           python -m build .
