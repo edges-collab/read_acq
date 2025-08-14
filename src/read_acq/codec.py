@@ -1,15 +1,11 @@
 """Wrapper for C-code that does the encoding-decoding."""
 
 import ctypes
-import sys
 from pathlib import Path
 
 import numpy as np
 
-if sys.platform == "win32":
-    cdll = next(Path(__file__).parent.glob("libdecode.dll"))
-else:
-    cdll = next(Path(__file__).parent.glob("libdecode.so"))
+cdll = sorted(Path(__file__).parent.glob("libdecode.*"))[0]
 
 cdll = ctypes.CDLL(str(cdll.resolve()))
 
