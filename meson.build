@@ -24,9 +24,10 @@ py.install_sources(
     ],
     subdir: 'read_acq'
 )
-py.extension_module(
+
+shared_library(
     'decode',
-    'src/read_acq/decode.c',
+    ['src/read_acq/decode.c'],
     install: true,
-    subdir: 'read_acq',
+    install_dir: py.get_install_dir()/'read_acq',
 )

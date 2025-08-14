@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 
 if sys.platform == "win32":
-    cdll = next(Path(__file__).parent.glob("decode.*.pyd"))
+    cdll = next(Path(__file__).parent.glob("decodelib.*.pyd"))
 else:
-    cdll = next(Path(__file__).parent.glob("decode.*.so"))
+    cdll = next(Path(__file__).parent.glob("libdecode.so"))
 
 cdll = ctypes.CDLL(str(cdll.resolve()))
 
@@ -48,9 +48,7 @@ def _decode_line(line: str) -> np.ndarray:
         arbitrarily scaled linear powers.
     """
     out = np.zeros(len(line) // 4)
-    res = _c_decode(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out))
-
-    if res:
+    if _c_decode(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out)) > 0:
         raise SystemError("C decoder exited with an error!")
 
     return out
