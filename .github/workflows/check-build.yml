@@ -28,6 +28,9 @@ jobs:
       #   # See https://github.com/actions/runner/issues/2996 for context
       #   run: sudo sntp -sS time.windows.com
 
+      - name: Touch all files
+        run: |
+          touch **
       - name: Build a binary wheel
         run: |
           python -m build .
