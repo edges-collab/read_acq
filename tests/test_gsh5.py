@@ -22,7 +22,7 @@ def test_roundtrip_gsh5(sample_acq: Path, tmp_path, with_fast_lst_setter):
     )
 
     write_gsdata_to_acq(gsd, tmp_path / "new.acq")
-    q, p, meta = decode_file(tmp_path / "new.acq", progress=False)
+    q, _p, _meta = decode_file(tmp_path / "new.acq", progress=False)
 
     np.testing.assert_allclose(
         q.T,

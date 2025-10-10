@@ -18,6 +18,6 @@ def test_convert(tmp_path_factory):
     result = cli.invoke(convert, [str(data), "--outfile", str(outfile)])
     assert result.exit_code == 0
 
-    q, p, meta = decode_file(data)
+    _q, p, _meta = decode_file(data)
     gsd = GSData.from_file(outfile)
     assert np.allclose(gsd.data[0, 0].T, p[0])
