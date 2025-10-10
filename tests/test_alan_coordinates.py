@@ -11,7 +11,7 @@ from read_acq import _coordinates as crda
 
 def test_alan_coordinates_toyrday():
     seconds_since_ny1970 = 1474043217.33333333
-    year, day, hour, minute, sec = crda.toyrday(seconds_since_ny1970)
+    year, day, hour, _minute, _sec = crda.toyrday(seconds_since_ny1970)
     assert year == 2016
     assert day == 260
     assert hour == 16
