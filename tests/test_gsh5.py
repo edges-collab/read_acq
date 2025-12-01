@@ -1,6 +1,5 @@
 """Tests of writing the data."""
 
-import os
 from pathlib import Path
 
 import numpy as np
@@ -23,7 +22,7 @@ def test_roundtrip_gsh5(sample_acq: Path, tmp_path, with_fast_lst_setter):
     )
 
     write_gsdata_to_acq(gsd, tmp_path / "new.acq")
-    q, p, meta = decode_file(tmp_path / "new.acq", progress=False)
+    q, _p, _meta = decode_file(tmp_path / "new.acq", progress=False)
 
     np.testing.assert_allclose(
         q.T,
@@ -65,7 +64,11 @@ def test_no_files_given():
 def test_only_empty_files_given(sample_acq, tmp_path):
     outpath = tmp_path / "empty.acq"
 
-    os.system(f"head -n 31 {sample_acq} > {outpath}")
+    with outpath.open("w") as fl, sample_acq.open("r") as sample_fl:
+        for i, line in enumerate(sample_fl):
+            fl.write(line)
+            if i == 30:
+                break
 
     gsd = read_acq_to_gsdata([sample_acq])
 

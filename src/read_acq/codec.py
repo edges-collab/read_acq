@@ -5,8 +5,9 @@ from pathlib import Path
 
 import numpy as np
 
-cdll = next(Path(__file__).parent.glob("decode.*.so"))
-cdll = ctypes.CDLL(cdll)
+cdll = sorted(Path(__file__).parent.glob("libdecode.*"))[0]
+
+cdll = ctypes.CDLL(str(cdll.resolve()))
 
 _c_decode = cdll.decode
 _c_decode.restype = ctypes.c_int
@@ -43,9 +44,7 @@ def _decode_line(line: str) -> np.ndarray:
         arbitrarily scaled linear powers.
     """
     out = np.zeros(len(line) // 4)
-    res = _c_decode(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out))
-
-    if res:
+    if _c_decode(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out)) > 0:
         raise SystemError("C decoder exited with an error!")
 
     return out

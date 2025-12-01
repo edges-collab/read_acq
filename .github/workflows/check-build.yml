@@ -5,19 +5,32 @@ on: push
 jobs:
   check-build:
     name: Twine Check
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+          os: [ubuntu-latest, macos-latest, windows-latest]
+          python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@master
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install Build Tools
         run: pip install build twine
 
+      # - name: Sync clock
+      #   # Sometimes the build breaks because the files are dated in the future...
+      #   # See https://github.com/actions/runner/issues/2996 for context
+      #   run: sudo sntp -sS time.windows.com
+
+      - name: Touch all files
+        run: |
+          touch **
       - name: Build a binary wheel
         run: |
           python -m build .
