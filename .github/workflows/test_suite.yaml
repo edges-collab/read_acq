@@ -28,15 +28,22 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: set PY
-        run: echo "PY=$(python -c 'import hashlib, sys;print(hashlib.sha256(sys.version.encode()+sys.executable.encode()).hexdigest())')" >> $GITHUB_ENV
-      - name: Setup Environment
-        run: |
-          pip install -U coverage
-          pip install .[dev]
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --locked --dev
+
       - name: Run Tests
         run: |
-          coverage run --parallel-mode -m pytest
+          uv run pytest -n auto
+
+      - name: Run Tests
+        run: |
+          uv run coverage run --parallel-mode -m pytest
 
       - name: Upload coverage data
         uses: actions/upload-artifact@v7

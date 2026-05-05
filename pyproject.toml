@@ -52,6 +52,7 @@ acq = "read_acq.cli:main"
 
 [dependency-groups]
 dev = [
+    "coverage>=7.13.5",
     "prek",
     "pytest",
     "pytest-cov",

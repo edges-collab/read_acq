@@ -944,6 +944,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "coverage" },
     { name = "prek" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -960,6 +961,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "coverage", specifier = ">=7.13.5" },
     { name = "prek" },
     { name = "pytest" },
     { name = "pytest-cov" },
