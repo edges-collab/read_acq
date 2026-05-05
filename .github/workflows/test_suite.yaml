@@ -28,12 +28,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: set PY
-        run: echo "PY=$(python -c 'import hashlib, sys;print(hashlib.sha256(sys.version.encode()+sys.executable.encode()).hexdigest())')" >> $GITHUB_ENV
-      - name: Setup Environment
+
+      # - name: Install uv
+      #   uses: astral-sh/setup-uv@v7
+      #   with:
+      #     enable-cache: true
+
+      - name: Install dependencies
+        # Need pip install because mesonpy backend doesn't work with uv:
+        # https://github.com/astral-sh/uv/issues/10214
+        run: python -m pip install --group dev .
+
+      - name: Run Tests
         run: |
-          pip install -U coverage
-          pip install .[dev]
+          python -m pytest -n auto
+
       - name: Run Tests
         run: |
           coverage run --parallel-mode -m pytest
@@ -68,13 +77,13 @@ jobs:
       - name: Setup Environment
         run: |
           pip install -U coverage
-          pip install .[dev]
+          pip install --group dev .
       - name: Get downstream package
         run: |
           cd ..
           git clone https://github.com/edges-collab/${{ matrix.package }}
           cd ${{ matrix.package }}
-          pip install .[dev]
+          pip install --group dev .
       - name: Print Versions
         run: pip freeze | grep -E "edges-|read_acq"
 

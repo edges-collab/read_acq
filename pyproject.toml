@@ -50,11 +50,13 @@ Changelog = "https://github.com/edges-collab/edges-cal/releases"
 [project.scripts]
 acq = "read_acq.cli:main"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pre-commit",
+    "coverage>=7.13.5",
+    "prek",
     "pytest",
     "pytest-cov",
+    "pytest-xdist>=3.8.0",
 ]
 
 
