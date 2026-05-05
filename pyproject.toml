@@ -56,6 +56,7 @@ dev = [
     "prek",
     "pytest",
     "pytest-cov",
+    "pytest-xdist>=3.8.0",
 ]
 
 
