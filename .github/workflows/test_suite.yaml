@@ -35,7 +35,9 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --all-extras --locked --dev
+        # Need a --no-editable install because mesonpy backend doesn't work:
+        # https://github.com/astral-sh/uv/issues/10214
+        run: uv sync --all-extras --locked --dev --no-editable
 
       - name: Run Tests
         run: |
