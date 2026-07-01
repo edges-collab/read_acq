@@ -104,7 +104,7 @@ jobs:
     name: Codecov Reporting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Download coverage data.
         uses: actions/download-artifact@v8
