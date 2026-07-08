@@ -72,6 +72,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON }}
+      - uses: astral-sh/setup-uv@v7
       - name: set PY
         run: echo "PY=$(python -c 'import hashlib, sys;print(hashlib.sha256(sys.version.encode()+sys.executable.encode()).hexdigest())')" >> $GITHUB_ENV
       - name: Setup Environment
@@ -83,7 +84,15 @@ jobs:
           cd ..
           git clone https://github.com/edges-collab/${{ matrix.package }}
           cd ${{ matrix.package }}
-          pip install --group dev .
+          # Constrain to the exact versions in the downstream package's own
+          # uv.lock (what its own CI verifies works), instead of letting pip
+          # resolve arbitrary latest versions of its test dependencies. This
+          # avoids spurious downstream failures when a transitive test
+          # dependency (e.g. pytest_cases) publishes a release that's
+          # incompatible with the latest pytest. See
+          # https://github.com/smarie/python-pytest-cases/issues/385
+          uv export --locked --all-groups --no-hashes --no-emit-project --no-emit-workspace -o /tmp/downstream-constraints.txt
+          pip install --group dev . -c /tmp/downstream-constraints.txt
       - name: Print Versions
         run: pip freeze | grep -E "edges-|read_acq"
 
