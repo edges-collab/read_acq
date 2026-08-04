@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-cdll = sorted(Path(__file__).parent.glob("libdecode.*"))[0]
+cdll = min(Path(__file__).parent.glob("libdecode.*"))
 
 cdll = ctypes.CDLL(str(cdll.resolve()))
 
