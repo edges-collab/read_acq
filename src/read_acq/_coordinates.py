@@ -36,7 +36,7 @@ def datetime_tosecs(dt: datetime):
     )
 
 
-def tosecs(yr: int, day: int, hour: int, minutes: int, sec: int | float) -> int | float:
+def tosecs(yr: int, day: int, hour: int, minutes: int, sec: float) -> int | float:
     """Convert a date-time to seconds since New Year 1970."""
     secs = (yr - 1970) * 31536000 + (day - 1) * 86400 + hour * 3600 + minutes * 60 + sec
 

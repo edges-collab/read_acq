@@ -402,8 +402,7 @@ def encode(
 
     with Path(filename).open("w") as fl:
         # Write the header
-        for k, v in meta.items():
-            fl.write(f";--{k}: {v}\n")
+        fl.writelines(f";--{k}: {v}\n" for k, v in meta.items())
 
         # Go through each time
         for i in range(len(p[0])):
