@@ -194,7 +194,7 @@ def _malformed_comment_mid_file(h, e):
 
 
 def _crlf_with_data_line_cut_before_spectrum(h, e):
-    # The warning shows the start of the line, which must not include the "\r".
+    # The warning shows the start of the line, including the "\r".
     e[7][1] = e[7][1].split(" spectrum ")[0] + "\n"
     return _crlf(h, e)
 
@@ -300,15 +300,12 @@ def _swpos0_comment_at_end_only(h, e):
 
 @pytest.mark.parametrize("modifier", [_no_swpos0_entries, _swpos0_comment_at_end_only])
 def test_no_complete_first_entry(modifier, clean_file: Path, tmp_path: Path):
-    """With no swpos=0 entry to start from, there are no cycles.
-
-    (decode_file leaks a StopIteration for these files, so we can't compare to it.)
-    """
+    """With no swpos=0 entry to start from, there are no cycles."""
     header, entries = _split(clean_file)
     path = tmp_path / "no_start.acq"
     path.write_bytes(modifier(header, entries).encode())
 
-    meta, ancillary = read_metadata(path)
+    meta, ancillary = _assert_matches_decode_file(path)
     assert meta["nfreq"] == NFREQ
     assert ancillary.keys() == {"adcmax", "adcmin", "times", "data_drops"}
     for val in ancillary.values():
