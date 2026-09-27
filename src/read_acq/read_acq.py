@@ -99,7 +99,7 @@ class DataLine:
             front, back = line.split(" spectrum ")
         except ValueError:
             raise ACQLineError(
-                "Could not parse line: '{line}' -- probably incomplete"
+                f"Could not parse line: '{line[:100]}' -- probably incomplete"
             ) from None
 
         match = re.match(cls.regex, front)
@@ -300,9 +300,17 @@ def _iter_cycles(
             cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
             if cline.swpos == 0:
                 break
+    else:
+        # No swpos=0 comment line, so there are no complete cycles.
+        return
 
     offset = fl.tell()
-    data = DataLine.read(next(fl).decode("ascii"), read_spectrum=read_spectrum)
+    try:
+        dline = next(fl)
+    except StopIteration:
+        # The file ends straight after the first swpos=0 comment line.
+        return
+    data = DataLine.read(dline.decode("ascii"), read_spectrum=read_spectrum)
     data = DataEntry(comment=cline, data=data)
 
     datas = (data,)
@@ -314,7 +322,22 @@ def _iter_cycles(
         unit="lines",
         leave=leave_progress,
     ):
-        cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
+        if line.startswith(b"\x00"):
+            # The rest of the file is NUL-padded (e.g. an interrupted write).
+            warnings.warn(
+                f"File {fl.name} contains NUL bytes; it was probably not fully "
+                "written. Returning the complete cycles read so far.",
+                stacklevel=1,
+            )
+            break
+
+        try:
+            cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
+        except ACQError as e:
+            warnings.warn(str(e), stacklevel=1)
+            datas = ()
+            continue
+
         offset = fl.tell()
         try:
             dline = next(fl).decode("ascii")

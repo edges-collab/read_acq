@@ -9,7 +9,7 @@ from astropy.time import Time
 from pygsdata import GSData
 from pygsdata.select import select_freqs, select_loads, select_lsts, select_times
 
-from read_acq import decode_file, encode
+from read_acq import codec, decode_file, encode
 from read_acq import read_acq as _ra
 from read_acq.gsdata import fast_lst_setter, read_acq_to_gsdata
 from read_acq.read_acq import ACQError, _index_file, _read_spectra
@@ -126,6 +126,38 @@ def test_index_skips_truncated_lines(long_acq: Path, tmp_path: Path):
     assert len(offsets) == NTIMES - 1
 
 
+@pytest.mark.parametrize("keep", ["first_comment", "no_swpos0"])
+def test_no_complete_cycles(long_acq: Path, tmp_path: Path, keep: str):
+    lines = long_acq.read_text().splitlines(keepends=True)
+    nheader = sum(line.startswith(";") for line in lines)
+    if keep == "first_comment":
+        # File ends straight after the first swpos=0 comment line (following a
+        # stray swpos=2 entry).
+        lines = lines[:nheader] + lines[nheader + 4 : nheader + 7]
+    else:
+        # Only the swpos=1 and swpos=2 entries of the first cycle.
+        lines = lines[:nheader] + lines[nheader + 2 : nheader + 6]
+
+    fname = tmp_path / "no_cycles.acq"
+    fname.write_text("".join(lines))
+
+    q, _, anc = decode_file(fname, progress=False)
+    assert q.size == 0
+    assert len(anc.data["times"]) == 0
+
+    _, offsets = _index_file(fname)
+    assert offsets.shape == (0, 3)
+
+    with pytest.raises(ACQError, match="No data in any files"):
+        read_acq_to_gsdata(fname, selectors={"time_selector": {"indx": [0]}})
+
+
+def test_decode_into_error(monkeypatch):
+    monkeypatch.setattr(codec, "_c_decode", lambda line, out: 1)
+    with pytest.raises(SystemError, match="C decoder exited with an error"):
+        codec._decode_into(b"AAAA", np.zeros(1))
+
+
 T0 = Time("2023:070:00:00:00", format="yday", scale="utc")
 
 
@@ -137,6 +169,7 @@ T0 = Time("2023:070:00:00:00", format="yday", scale="utc")
         {"lst_selector": {"lst_range": (6, 12)}},
         {"lst_selector": {"lst_range": (22, 2)}},
         {"lst_selector": {"lst_range": (6, 12), "gha": True}},
+        {"lst_selector": {}},
         {"freq_selector": {"freq_range": (50 * un.MHz, 100 * un.MHz)}},
         {"freq_selector": {"indx": [10, 20, 500]}},
         {"load_selector": {"loads": ("ant",)}},
