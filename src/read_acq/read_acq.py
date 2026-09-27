@@ -284,27 +284,14 @@ def _warn_nul_padded(fname: Path):
     )
 
 
-def _iter_cycles(
-    fl,
-    fastspec: bool,
-    read_spectrum: bool = True,
-    progress: bool = True,
-    leave_progress: bool = True,
-    desc: str = "",
-):
-    """Iterate over the complete switch cycles in an open (binary-mode) ACQ file.
+def _first_entry(
+    fl: BinaryIO, fastspec: bool, read_spectrum: bool
+) -> tuple[DataEntry, int] | None:
+    """Read the first swpos=0 entry of an ACQ file, and the offset of its data line.
 
-    Incomplete cycles and malformed lines are skipped (with a warning for the latter).
-
-    Yields
-    ------
-    datas : tuple of DataEntry
-        The three entries (swpos 0, 1, 2) of a complete cycle. Their spectra are
-        None unless ``read_spectrum`` is True.
-    offsets : tuple of int
-        The byte offsets of the start of each of the three data lines in the file.
+    Returns None if there is no such entry. Unlike later entries, a bad first entry
+    is an error. ``fl`` is left at the start of the next line.
     """
-    # First find the first swpos=0 line.
     for line in fl:
         if line.startswith(b"#"):
             cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
@@ -312,79 +299,118 @@ def _iter_cycles(
                 break
     else:
         # No swpos=0 comment line, so there are no complete cycles.
-        return
+        return None
 
     offset = fl.tell()
-    try:
-        dline = next(fl)
-    except StopIteration:
+    line = fl.readline()
+    if not line:
         # The file ends straight after the first swpos=0 comment line.
-        return
-    data = DataLine.read(dline.decode("ascii"), read_spectrum=read_spectrum)
-    data = DataEntry(comment=cline, data=data)
+        return None
 
-    datas = (data,)
-    offsets = (offset,)
-    for line in tqdm.tqdm(
-        fl,
-        disable=not progress,
-        desc=desc,
-        unit="lines",
-        leave=leave_progress,
-    ):
-        if line.startswith(b"\x00"):
-            # The rest of the file is NUL-padded (e.g. an interrupted write).
-            _warn_nul_padded(fl.name)
-            break
+    line = line.decode("ascii")
+    if read_spectrum:
+        return DataEntry(comment=cline, data=DataLine.read(line)), offset
+    return _read_entry(cline, line), offset
 
-        try:
-            cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
-        except ACQError as e:
-            warnings.warn(str(e), stacklevel=1)
-            datas = ()
+
+def _complete_cycles(
+    entries: Iterable[tuple[DataEntry, int] | None],
+) -> Iterator[tuple[tuple[DataEntry, ...], tuple[int, ...]]]:
+    """Group a stream of (entry, offset) pairs into complete (swpos 0, 1, 2) cycles.
+
+    A ``None`` in the stream marks a bad entry, and discards the cycle in progress.
+
+    Yields
+    ------
+    datas : tuple of DataEntry
+        The three entries (swpos 0, 1, 2) of a complete cycle.
+    offsets : tuple of int
+        The byte offsets of the start of each of the three data lines in the file.
+    """
+    datas, offsets = (), ()
+    for item in entries:
+        if item is None:
+            datas, offsets = (), ()
             continue
 
-        offset = fl.tell()
-        try:
-            dline = next(fl).decode("ascii")
-            data = DataLine.read(dline, read_spectrum=read_spectrum)
-        except StopIteration:
-            # We reached the end of the file.
-            break
-        except ACQLineError as e:
-            # Something was bad in this line. Remove this iteration from the data
-            # But try to keep going in the file.
-            warnings.warn(str(e), stacklevel=1)
-            datas = ()
-            continue
-
-        try:
-            data = DataEntry(comment=cline, data=data)
-            # Without the spectrum, DataEntry can't validate its length, so do it here.
-            if not read_spectrum and _encoded_length(dline) != cline.nspec:
-                raise ACQLineError("nspec and length of spectrum do not match")
-        except ACQLineError as e:
-            warnings.warn(str(e), stacklevel=1)
-            datas = ()
-            continue
-
+        data, offset = item
         if data.comment.swpos == len(datas):
             # Add this to the cycle
             datas += (data,)
-            offsets = (*offsets[: len(datas) - 1], offset)
+            offsets += (offset,)
         elif data.comment.swpos == 0:
             # Discard the previous cycle and start again -- it was incomplete.
-            datas = (data,)
-            offsets = (offset,)
+            datas, offsets = (data,), (offset,)
         else:
             # Discard everything and keep going.
-            datas = ()
+            datas, offsets = (), ()
             continue
 
         if data.comment.swpos == 2:
             # We have a full cycle
             yield datas, offsets
-            datas = ()
+            datas, offsets = (), ()
+
+
+def _iter_decoded_entries(
+    fl: BinaryIO, lines: Iterable[bytes], fastspec: bool
+) -> Iterator[tuple[DataEntry, int] | None]:
+    """Yield the decoded entries of an ACQ file, and their offsets, line by line.
+
+    ``lines`` iterates over ``fl``, which must be positioned at a comment line. Bad
+    entries are yielded as None, with a warning.
+    """
+    for line in lines:
+        if line.startswith(b"\x00"):
+            # The rest of the file is NUL-padded (e.g. an interrupted write).
+            _warn_nul_padded(fl.name)
+            return
+
+        try:
+            cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
+        except ACQError as e:
+            warnings.warn(str(e), stacklevel=1)
+            yield None
+            continue
+
+        offset = fl.tell()
+        try:
+            data = DataLine.read(next(fl).decode("ascii"))
+            data = DataEntry(comment=cline, data=data)
+        except StopIteration:
+            # We reached the end of the file.
+            return
+        except ACQLineError as e:
+            # Something was bad in this line. Remove this iteration from the data
+            # But try to keep going in the file.
+            warnings.warn(str(e), stacklevel=1)
+            yield None
+            continue
+
+        yield data, offset
+
+
+def _iter_cycles(
+    fl: BinaryIO,
+    fastspec: bool,
+    progress: bool = True,
+    leave_progress: bool = True,
+    desc: str = "",
+):
+    """Iterate over the complete, decoded switch cycles in an open (binary) ACQ file.
+
+    Incomplete cycles and malformed lines are skipped (with a warning for the latter).
+    Yields the same as :func:`_complete_cycles`.
+    """
+    first = _first_entry(fl, fastspec, read_spectrum=True)
+    if first is None:
+        return
+
+    lines = tqdm.tqdm(
+        fl, disable=not progress, desc=desc, unit="lines", leave=leave_progress
+    )
+    entries = _iter_decoded_entries(fl, lines, fastspec)
+    yield from _complete_cycles(itertools.chain([first], entries))
 
 
 def decode_file(
@@ -440,119 +466,6 @@ def decode_file(
         q = (p0 - p1) / (p2 - p1)
 
     return q.T, [p0.T, p1.T, p2.T], anc
-
-
-def _index_file(
-    fname: str | Path,
-    progress: bool = False,
-    leave_progress: bool = True,
-) -> tuple[Ancillary, np.ndarray]:
-    """Read the ancillary data of an ACQ file without decoding any spectra.
-
-    Returns
-    -------
-    anc : Ancillary
-        The (completed) ancillary data, with one row per complete switch cycle, exactly
-        as returned by :func:`decode_file`.
-    offsets : np.ndarray
-        An integer array of shape ``(ncycles, 3)`` giving the byte offset of the data
-        line for each switch position of each cycle. Pass (a subset of) these to
-        :func:`_read_spectra` to decode the spectra.
-    """
-    fname = Path(fname)
-    anc = Ancillary(fname)
-
-    fastspec = "data_drops" in anc.meta
-    offsets = []
-
-    with fname.open("rb") as fl:
-        for datas, offs in _iter_cycles(
-            fl,
-            fastspec=fastspec,
-            read_spectrum=False,
-            progress=progress,
-            leave_progress=leave_progress,
-            desc=f"Indexing {fname.name}",
-        ):
-            anc.append(datas)
-            offsets.append(offs)
-
-    anc.complete()
-    return anc, np.array(offsets, dtype=np.int64).reshape((-1, 3))
-
-
-def _read_spectra(
-    fname: str | Path,
-    offsets: np.ndarray,
-    nchannels: int,
-    channels: slice = slice(None),
-) -> np.ndarray:
-    """Decode the spectra at given byte offsets of an ACQ file.
-
-    Parameters
-    ----------
-    fname : str or Path
-        The ACQ file.
-    offsets : np.ndarray
-        Integer array of shape ``(ntimes, 3)`` of data-line offsets, as returned by
-        :func:`_index_file`.
-    nchannels : int
-        The total number of channels in each spectrum.
-    channels : slice
-        A contiguous (unit-step) range of channels to decode.
-
-    Returns
-    -------
-    np.ndarray
-        The decoded spectra, with shape ``(3, ntimes, nchannels_selected)``.
-    """
-    start, stop, step = channels.indices(nchannels)
-    if step != 1:
-        raise ValueError("channels must be a contiguous slice")
-
-    out = np.zeros((offsets.shape[1], offsets.shape[0], max(stop - start, 0)))
-    sep = _SPECTRUM_SEP.encode("ascii")
-
-    with Path(fname).open("rb") as fl:
-        for i, offs in enumerate(offsets):
-            for j, off in enumerate(offs):
-                fl.seek(off)
-                line = fl.readline()
-                enc = line[line.index(sep) + len(sep) :].lstrip()
-                _decode_into(enc[4 * start : 4 * stop], out[j, i])
-
-    return out
-
-
-def _complete_cycles(
-    entries: Iterable[DataEntry | None],
-) -> Iterator[tuple[DataEntry, DataEntry, DataEntry]]:
-    """Group a stream of entries into complete (swpos 0, 1, 2) cycles.
-
-    A ``None`` in the stream marks a bad entry, and discards the cycle in progress.
-    This is the same grouping as in :func:`_iter_cycles`.
-    """
-    datas = ()
-    for data in entries:
-        if data is None:
-            datas = ()
-            continue
-
-        if data.comment.swpos == len(datas):
-            # Add this to the cycle
-            datas += (data,)
-        elif data.comment.swpos == 0:
-            # Discard the previous cycle and start again -- it was incomplete.
-            datas = (data,)
-        else:
-            # Discard everything and keep going.
-            datas = ()
-            continue
-
-        if data.comment.swpos == 2:
-            # We have a full cycle
-            yield datas
-            datas = ()
 
 
 # Bytes read at the start of each entry: enough for the comment line and the front
@@ -613,15 +526,16 @@ def _line_ending(tail: bytes) -> int:
 
 def _iter_entries_without_spectra(
     fname: Path, fl: BinaryIO, fastspec: bool
-) -> Iterator[DataEntry | None]:
-    """Yield the entries of an ACQ file without reading their spectra.
+) -> Iterator[tuple[DataEntry, int] | None]:
+    """Yield the entries of an ACQ file, and their offsets, without their spectra.
 
-    This yields the entries (and warnings) that :func:`_iter_cycles` reads, but with
-    no spectra. Since the encoded spectrum of a good data line has exactly 4*nspec
-    characters, we seek straight to where the line should end, and check that it does.
-    If it doesn't, we fall back to reading the whole line. (A data line that is too
-    short would be missed only if the lines after it happen to end exactly where it
-    should have ended, which needs corruption spanning exactly whole lines.)
+    This yields the same entries, offsets and warnings as
+    :func:`_iter_decoded_entries`, but with no spectra. Since the encoded spectrum of
+    a good data line has exactly 4*nspec characters, we seek straight to where the
+    line should end, and check that it does. If it doesn't, we fall back to reading
+    the whole line. (A data line that is too short would be missed only if the lines
+    after it happen to end exactly where it should have ended, which needs corruption
+    spanning exactly whole lines.)
 
     ``fl`` must be a binary file positioned at the start of a comment line, and
     ``fname`` is its name (for warnings).
@@ -655,13 +569,15 @@ def _iter_entries_without_spectra(
             pos += len(comment)
             continue
 
+        # The start of the data line.
+        offset = pos + len(comment)
         if head is not None:
             dline = DataLine.read(f"{front.decode()} spectrum ", read_spectrum=False)
             end = pos + spec_start + 4 * cline.nspec
             fl.seek(end)
             if eol := _line_ending(fl.read(3)):
                 try:
-                    entry = DataEntry(comment=cline, data=dline)
+                    entry = DataEntry(comment=cline, data=dline), offset
                 except ACQLineError as e:
                     warnings.warn(str(e), stacklevel=1)
                     entry = None
@@ -670,18 +586,96 @@ def _iter_entries_without_spectra(
                 continue
 
         # The data line is not the expected length: read all of it.
-        fl.seek(pos + len(comment))
+        fl.seek(offset)
         line = fl.readline()
         if not line:
             # We reached the end of the file.
             return
         try:
-            entry = _read_entry(cline, line.decode("ascii"))
+            entry = _read_entry(cline, line.decode("ascii")), offset
         except ACQLineError as e:
             warnings.warn(str(e), stacklevel=1)
             entry = None
         yield entry
         pos = fl.tell()
+
+
+def _index_file(fname: str | Path) -> tuple[Ancillary, np.ndarray]:
+    """Read the ancillary data of an ACQ file without reading any spectra.
+
+    This seeks over the spectra (see :func:`_iter_entries_without_spectra`), so it
+    reads only a small fraction of the file.
+
+    Returns
+    -------
+    anc : Ancillary
+        The (completed) ancillary data, with one row per complete switch cycle, exactly
+        as returned by :func:`decode_file`.
+    offsets : np.ndarray
+        An integer array of shape ``(ncycles, 3)`` giving the byte offset of the data
+        line for each switch position of each cycle. Pass (a subset of) these to
+        :func:`_read_spectra` to decode the spectra.
+    """
+    fname = Path(fname)
+    anc = Ancillary(fname)
+
+    fastspec = "data_drops" in anc.meta
+    offsets = []
+
+    # A small buffer, so that each read at an entry does not read far beyond it.
+    with fname.open("rb", buffering=2 * _HEAD_SIZE) as fl:
+        first = _first_entry(fl, fastspec, read_spectrum=False)
+        if first is not None:
+            entries = _iter_entries_without_spectra(fname, fl, fastspec)
+            for datas, offs in _complete_cycles(itertools.chain([first], entries)):
+                anc.append(datas)
+                offsets.append(offs)
+
+    anc.complete()
+    return anc, np.array(offsets, dtype=np.int64).reshape((-1, 3))
+
+
+def _read_spectra(
+    fname: str | Path,
+    offsets: np.ndarray,
+    nchannels: int,
+    channels: slice = slice(None),
+) -> np.ndarray:
+    """Decode the spectra at given byte offsets of an ACQ file.
+
+    Parameters
+    ----------
+    fname : str or Path
+        The ACQ file.
+    offsets : np.ndarray
+        Integer array of shape ``(ntimes, 3)`` of data-line offsets, as returned by
+        :func:`_index_file`.
+    nchannels : int
+        The total number of channels in each spectrum.
+    channels : slice
+        A contiguous (unit-step) range of channels to decode.
+
+    Returns
+    -------
+    np.ndarray
+        The decoded spectra, with shape ``(3, ntimes, nchannels_selected)``.
+    """
+    start, stop, step = channels.indices(nchannels)
+    if step != 1:
+        raise ValueError("channels must be a contiguous slice")
+
+    out = np.zeros((offsets.shape[1], offsets.shape[0], max(stop - start, 0)))
+    sep = _SPECTRUM_SEP.encode("ascii")
+
+    with Path(fname).open("rb") as fl:
+        for i, offs in enumerate(offsets):
+            for j, off in enumerate(offs):
+                fl.seek(off)
+                line = fl.readline()
+                enc = line[line.index(sep) + len(sep) :].lstrip()
+                _decode_into(enc[4 * start : 4 * stop], out[j, i])
+
+    return out
 
 
 def read_metadata(fname: str | Path) -> tuple[dict, dict[str, np.ndarray]]:
@@ -707,30 +701,7 @@ def read_metadata(fname: str | Path) -> tuple[dict, dict[str, np.ndarray]]:
         ``(ncycles, 3)``: "times", "adcmax", "adcmin" and (for fastspec files)
         "data_drops".
     """
-    fname = Path(fname)
-    anc = Ancillary(fname)
-    fastspec = "data_drops" in anc.meta
-
-    # A small buffer, so that each read at an entry does not read far beyond it.
-    with fname.open("rb", buffering=2 * _HEAD_SIZE) as fl:
-        # As in decode_file, start at the first swpos=0 entry.
-        for line in fl:
-            if line.startswith(b"#"):
-                cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
-                if cline.swpos == 0:
-                    break
-        else:
-            cline = None
-
-        line = fl.readline() if cline is not None else b""
-        if line:
-            # As in decode_file, a bad first entry is an error.
-            first = _read_entry(cline, line.decode("ascii"))
-            entries = _iter_entries_without_spectra(fname, fl, fastspec)
-            for datas in _complete_cycles(itertools.chain([first], entries)):
-                anc.append(datas)
-
-    anc.complete()
+    anc, _ = _index_file(fname)
     return anc.meta, anc.data
 
 
