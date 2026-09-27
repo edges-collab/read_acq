@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import re
 import sys
 import warnings
 from collections.abc import Callable
@@ -12,6 +14,13 @@ import pytest
 
 import read_acq
 from read_acq import decode_file, encode, read_metadata
+from read_acq.read_acq import (
+    ACQError,
+    Ancillary,
+    CommentLine,
+    DataLine,
+    _index_file,
+)
 
 DATA = Path(__file__).parent / "data"
 
@@ -199,6 +208,75 @@ def _crlf_with_data_line_cut_before_spectrum(h, e):
     return _crlf(h, e)
 
 
+def _starts_mid_cycle_with_truncated_leading_spectrum(h, e):
+    # decode_file does not read the leading (swpos 1, 2) entries, so this is not an
+    # error or a warning.
+    e[1][1] = _truncate_spectrum(e[1][1])
+    return _join(h, e[1:])
+
+
+# The first line of the file is read for the metadata, so these modify the second
+# leading entry.
+
+
+def _starts_mid_cycle_with_leading_data_line_missing(h, e):
+    return _join(h, [e[1], [e[2][0]], *e[3:]])
+
+
+def _starts_mid_cycle_with_leading_data_line_cut_before_spectrum(h, e):
+    e[2][1] = e[2][1].split(" spectrum ")[0] + "\n"
+    return _join(h, e[1:])
+
+
+def _starts_mid_cycle_with_leading_spectrum_too_long(h, e):
+    e[2][1] = e[2][1].rstrip("\n") + "AAAAAAAA\n"
+    return _join(h, e[1:])
+
+
+# Longer than the small read made at each entry, so that the reader has to read more
+# to find where the spectrum starts.
+_LONG = " " * 600
+
+
+def _long_comment_line_mid_file(h, e):
+    e[7][0] = e[7][0].replace("adcmax ", f"adcmax {_LONG}", 1)
+    return _join(h, e)
+
+
+def _long_front_matter_mid_file(h, e):
+    e[7][1] = e[7][1].replace(" spectrum ", f" spectrum {_LONG}", 1)
+    return _join(h, e)
+
+
+def _long_first_head(h, e):
+    e[0][0] = e[0][0].replace("adcmax ", f"adcmax {_LONG}", 1)
+    e[0][1] = e[0][1].replace(" spectrum ", f" spectrum {_LONG}", 1)
+    return _join(h, e)
+
+
+def _long_leading_head(h, e):
+    e[1][0] = e[1][0].replace("adcmax ", f"adcmax {_LONG}", 1)
+    e[1][1] = e[1][1].replace(" spectrum ", f" spectrum {_LONG}", 1)
+    return _join(h, e[1:])
+
+
+def _long_header(h, e):
+    # Longer than the first read of the file.
+    return _join([*h, *(f";--note{i}: {'x' * 60}\n" for i in range(200))], e)
+
+
+def _header_item_without_value(h, e):
+    return _join([*h, ";--novalue\n"], e)
+
+
+def _junk_line_before_first_comment(h, e):
+    return _join([*h, "junk\n"], e)
+
+
+def _crlf_starting_mid_cycle(h, e):
+    return _crlf(h, e[1:])
+
+
 MODIFIERS: dict[str, Callable] = {
     f.__name__.lstrip("_"): f
     for f in [
@@ -225,6 +303,18 @@ MODIFIERS: dict[str, Callable] = {
         _nul_padded_data_line,
         _malformed_comment_mid_file,
         _crlf_with_data_line_cut_before_spectrum,
+        _starts_mid_cycle_with_truncated_leading_spectrum,
+        _starts_mid_cycle_with_leading_data_line_missing,
+        _starts_mid_cycle_with_leading_data_line_cut_before_spectrum,
+        _starts_mid_cycle_with_leading_spectrum_too_long,
+        _long_comment_line_mid_file,
+        _long_front_matter_mid_file,
+        _long_first_head,
+        _long_leading_head,
+        _long_header,
+        _header_item_without_value,
+        _junk_line_before_first_comment,
+        _crlf_starting_mid_cycle,
     ]
 }
 
@@ -335,28 +425,375 @@ def test_does_not_decode_spectra(monkeypatch, clean_file: Path):
     assert len(ancillary["times"]) == 6
 
 
-def _bytes_read() -> int:
-    with Path("/proc/self/io").open() as fl:
-        for line in fl:
-            if line.startswith("rchar:"):
-                return int(line.split()[1])
-    raise RuntimeError("no rchar in /proc/self/io")  # pragma: no cover
+# --- A bad first entry is an error, as in decode_file ----------------------------
 
 
-@pytest.mark.skipif(
-    not sys.platform.startswith("linux") or not Path("/proc/self/io").exists(),
-    reason="needs /proc/self/io to count bytes read",
+def _outcome(func, path: Path):
+    """Return what ``func(path)`` raises (type and message), and its warnings."""
+    with warnings.catch_warnings(record=True) as ws:
+        warnings.simplefilter("always")
+        try:
+            func(path)
+        except Exception as e:
+            raised = (type(e), str(e))
+        else:
+            raised = None
+    return raised, [(w.category, str(w.message)) for w in ws]
+
+
+def _first_spectrum_truncated(h, e):
+    e[0][1] = _truncate_spectrum(e[0][1])
+    return _join(h, e)
+
+
+def _first_spectrum_too_long(h, e):
+    e[0][1] = e[0][1].rstrip("\n") + "AAAAAAAA\n"
+    return _join(h, e)
+
+
+def _first_data_line_cut_before_spectrum(h, e):
+    e[0][1] = e[0][1].split(" spectrum ")[0] + "\n"
+    return _join(h, e)
+
+
+def _first_data_line_swpos_mismatch(h, e):
+    e[0][1] = f"{e[0][1][:18]}1{e[0][1][19:]}"
+    return _join(h, e)
+
+
+def _first_front_matter_malformed(h, e):
+    e[0][1] = "not a time" + e[0][1][17:]
+    return _join(h, e)
+
+
+def _first_comment_malformed(h, e):
+    e[0][0] = "# garbage\n"
+    return _join(h, e)
+
+
+def _first_spectrum_truncated_after_leading_entries(h, e):
+    e[3][1] = _truncate_spectrum(e[3][1])
+    return _join(h, e[1:])
+
+
+def _leading_comment_malformed(h, e):
+    e[1][0] = "# garbage\n"
+    return _join(h, e[1:])
+
+
+def _first_comment_is_last_line(h, e):
+    return _join(h, []) + e[0][0]
+
+
+def _no_comment_lines(h, e):
+    return _join(h, [])
+
+
+def _first_data_line_nul_padded(h, e):
+    return _join(h, []) + e[0][0] + _NUL
+
+
+BAD_FIRST_ENTRY: dict[str, Callable] = {
+    f.__name__.lstrip("_"): f
+    for f in [
+        _first_spectrum_truncated,
+        _first_spectrum_too_long,
+        _first_data_line_cut_before_spectrum,
+        _first_data_line_swpos_mismatch,
+        _first_front_matter_malformed,
+        _first_comment_malformed,
+        _first_spectrum_truncated_after_leading_entries,
+        _leading_comment_malformed,
+        _first_comment_is_last_line,
+        _no_comment_lines,
+        _first_data_line_nul_padded,
+    ]
+}
+
+
+@pytest.mark.parametrize("modifier", BAD_FIRST_ENTRY.keys())
+def test_bad_first_entry_raises_as_decode_file(
+    modifier, clean_file: Path, tmp_path: Path
+):
+    header, entries = _split(clean_file)
+    path = tmp_path / f"{modifier}.acq"
+    path.write_bytes(BAD_FIRST_ENTRY[modifier](header, entries).encode())
+
+    expected = _outcome(lambda p: decode_file(p, progress=False), path)
+    assert expected[0] is not None, "decode_file should raise"
+    assert _outcome(read_metadata, path) == expected
+
+
+# --- The header is parsed exactly as it was when read in text mode ---------------
+
+
+class _TextModeHeader:
+    """The text-mode header parsing of Ancillary before #160, as a reference."""
+
+    header_char = ";"
+
+    def __init__(self, fname: Path):
+        self.fastspec_version = self._get_fastspec_version(fname)
+        self.meta = self.read_metadata(fname)
+
+    def _get_fastspec_version(self, fname: Path):
+        with fname.open("r") as fl:
+            first_line = fl.readline()
+        if first_line.startswith(self.header_char):
+            return first_line.split("FASTSPEC")[-1]
+        return None
+
+    def _read_header(self, fname: Path):
+        out = {}
+        name_pattern = re.compile(r"[a-zA-Z_]+")
+        with fname.open("r") as fl:
+            for line in fl:
+                if not line.startswith(self.header_char):
+                    break
+                if line.startswith("; FASTSPEC"):
+                    name = "fastspec_version"
+                    val = line.split()[-1]
+                else:
+                    try:
+                        name, val = line.split(": ")
+                    except ValueError:
+                        warnings.warn(
+                            f"In file {fname}, item {line} has no value", stacklevel=1
+                        )
+                        name = line.split(":")[0]
+                        val = ""
+                    name = name_pattern.findall(name)[0]
+                for tp in [int, float, str]:
+                    try:
+                        out[name] = tp(val.split()[0])
+                        break
+                    except IndexError:
+                        with contextlib.suppress(ValueError):
+                            out[name] = tp(val)
+                    except ValueError:
+                        pass
+        return out
+
+    def read_metadata(self, fname: Path):
+        out = self._read_header(fname)
+        with fname.open("r") as fl:
+            for line in fl:
+                if line.startswith("#"):
+                    comment = CommentLine.read(line)
+                    data = DataLine.read(next(fl), read_spectrum=False)
+                    break
+            else:
+                raise ACQError(f"No comment line found in file {fname}.")
+        out.update(
+            {
+                "temperature": comment.temp,
+                "nblk": comment.nblk,
+                "nfreq": comment.nspec,
+                "freq_min": data.freqmin,
+                "freq_max": data.freqmax,
+                "freq_res": data.deltaf,
+            }
+        )
+        if comment.resolution is not None:
+            out["resolution"] = comment.resolution
+        if comment.data_drops is not None:
+            out["data_drops"] = comment.data_drops
+        return out
+
+
+def _header_outcome(cls, path: Path):
+    out = {}
+
+    def _read(p):
+        anc = cls(p)
+        out.update(version=anc.fastspec_version, meta=anc.meta)
+
+    return (*_outcome(_read, path), out)
+
+
+def _fastspec_version_line(h, e):
+    return _join(["; FASTSPEC 1.2.3\n", *h], e)
+
+
+def _fastspec_version_line_only(h, e):
+    return "; FASTSPEC 1.2.3\n"
+
+
+def _empty(h, e):
+    return ""
+
+
+def _non_ascii_header(h, e):
+    return _join([*h, *(f";--note{i}: {'µ' * 40}\n" for i in range(100))], e)
+
+
+def _non_ascii_header_shifted(h, e):
+    # Shift the header by a byte, so that one of the two cases splits a multi-byte
+    # character at the end of the first read of the file.
+    return _join([";\n", *h, *(f";--note{i}: {'µ' * 40}\n" for i in range(100))], e)
+
+
+def _header_name_without_letters(h, e):
+    return _join([*h, ";--123: 4\n"], e)
+
+
+def _header_value_types(h, e):
+    return _join([*h, ";--a: 1\n", ";--b: 2.5 MHz\n", ";--c: text\n", ";--d: \n"], e)
+
+
+def _cr_only_in_header(h, e):
+    return _join([";--a: 1\r;--b: 2\n", *h], e)
+
+
+HEADER_CASES: dict[str, Callable] = {
+    **MODIFIERS,
+    **BAD_FIRST_ENTRY,
+    **{
+        f.__name__.lstrip("_"): f
+        for f in [
+            _fastspec_version_line,
+            _fastspec_version_line_only,
+            _empty,
+            _non_ascii_header,
+            _non_ascii_header_shifted,
+            _header_name_without_letters,
+            _header_value_types,
+            _cr_only_in_header,
+        ]
+    },
+}
+
+
+@pytest.mark.parametrize("modifier", HEADER_CASES.keys())
+def test_header_matches_text_mode_read(modifier, clean_file: Path, tmp_path: Path):
+    header, entries = _split(clean_file)
+    path = tmp_path / f"{modifier}.acq"
+    path.write_bytes(HEADER_CASES[modifier](header, entries).encode())
+    assert _header_outcome(Ancillary, path) == _header_outcome(_TextModeHeader, path)
+
+
+@pytest.mark.parametrize("fname", ["sample.acq", "pxspec.acq"])
+def test_header_matches_text_mode_read_real_data(fname):
+    path = DATA / fname
+    assert _header_outcome(Ancillary, path) == _header_outcome(_TextModeHeader, path)
+
+
+def test_ancillary_methods_unchanged(clean_file: Path):
+    anc = Ancillary(clean_file)
+    ref = _TextModeHeader(clean_file)
+    assert anc.read_metadata(clean_file) == ref.meta
+    assert anc._read_header(clean_file) == ref._read_header(clean_file)
+    assert anc._get_fastspec_version(clean_file) == ref.fastspec_version
+
+
+# --- I/O: how often the file is opened, and how much of it is read ---------------
+
+_opened: list[str] | None = None
+
+
+def _audit(event, args):
+    if _opened is not None and event == "open" and isinstance(args[0], str | Path):
+        _opened.append(str(args[0]))
+
+
+sys.addaudithook(_audit)
+
+
+def _count_opens(func, path: Path) -> int:
+    global _opened
+    _opened = []
+    try:
+        func(path)
+        return sum(Path(p) == path for p in _opened)
+    finally:
+        _opened = None
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        read_metadata,
+        Ancillary,
+        lambda p: decode_file(p, progress=False),
+        _index_file,
+    ],
+    ids=["read_metadata", "Ancillary", "decode_file", "_index_file"],
 )
-def test_reads_small_fraction_of_file(tmp_path: Path):
-    path = _write_synthetic(tmp_path / "big.acq", ntimes=40, nfreq=32768)
-    size = path.stat().st_size
+@pytest.mark.parametrize("modifier", ["clean", "starts_mid_cycle"])
+def test_opens_file_once(func, modifier, clean_file: Path, tmp_path: Path):
+    header, entries = _split(clean_file)
+    path = tmp_path / f"{modifier}.acq"
+    path.write_bytes(MODIFIERS[modifier](header, entries).encode())
+    assert _count_opens(func, path) == 1
 
-    before = _bytes_read()
+
+def _io_counters() -> tuple[int, int]:
+    """Return the number of read syscalls and bytes read by this process so far."""
+    vals = dict(
+        line.split(": ")
+        for line in Path("/proc/self/io").read_text().split("\n")
+        if line
+    )
+    return int(vals["syscr"]), int(vals["rchar"])
+
+
+_needs_proc_io = pytest.mark.skipif(
+    not sys.platform.startswith("linux") or not Path("/proc/self/io").exists(),
+    reason="needs /proc/self/io to count reads",
+)
+
+BIG_NTIMES = 40
+BIG_NFREQ = 32768
+
+
+@pytest.fixture(scope="module")
+def big_file(tmp_path_factory) -> Path:
+    return _write_synthetic(
+        tmp_path_factory.mktemp("big") / "big.acq", ntimes=BIG_NTIMES, nfreq=BIG_NFREQ
+    )
+
+
+def _measure_read_metadata(path: Path):
+    before = _io_counters()
     _, ancillary = read_metadata(path)
-    nread = _bytes_read() - before
+    after = _io_counters()
+    return ancillary, after[0] - before[0], after[1] - before[1]
 
-    assert len(ancillary["times"]) == 40
-    assert nread < 0.1 * size, f"read {nread} of {size} bytes"
+
+@_needs_proc_io
+@pytest.mark.parametrize(
+    ("modifier", "ncycles"),
+    [("clean", BIG_NTIMES), ("starts_mid_cycle", BIG_NTIMES - 1)],
+)
+def test_reads_only_entry_heads(modifier, ncycles, big_file: Path, tmp_path: Path):
+    """Only a small read per entry: no spectrum is read, not even the first."""
+    header, entries = _split(big_file)
+    path = tmp_path / f"{modifier}.acq"
+    path.write_bytes(MODIFIERS[modifier](header, entries).encode())
+    nentries = len(_split(path)[1])
+
+    ancillary, nreads, nbytes = _measure_read_metadata(path)
+
+    assert len(ancillary["times"]) == ncycles
+    # A few reads for the header, then one per entry.
+    assert nreads <= nentries + 4
+    # Each entry's head (comment line and data-line front matter) is ~160 bytes.
+    assert nbytes <= 300 * nentries + 8192, f"read {nbytes} bytes"
+
+
+@_needs_proc_io
+def test_long_heads_are_not_read_in_full(big_file: Path, tmp_path: Path):
+    """Heads that don't fit in the small read need a larger one, not a full read."""
+    header, entries = _split(big_file)
+    for entry in entries:
+        entry[1] = entry[1].replace(" spectrum ", f" spectrum {_LONG}", 1)
+    path = tmp_path / "long_heads.acq"
+    path.write_bytes(_join(header, entries).encode())
+
+    ancillary, _, nbytes = _measure_read_metadata(path)
+
+    assert len(ancillary["times"]) == BIG_NTIMES
+    assert nbytes < 0.1 * path.stat().st_size, f"read {nbytes} bytes"
 
 
 def test_public_api():
