@@ -103,6 +103,8 @@ extend-select = [
   "PERF", # performance
   # "FURB", # refurb
   "RUF",  # ruff-specific rules
+  "BLE001",  # blind except (a default from ruff 0.16)
+  "S102",    # exec (a default from ruff 0.16)
 ]
 ignore = [
     "DTZ007",   # use %z in strptime
