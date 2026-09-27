@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import itertools
 import re
 import warnings
@@ -148,8 +149,22 @@ class Ancillary:
 
     def __init__(self, fname: str | Path):
         fname = Path(fname)
-        self.fastspec_version = self._get_fastspec_version(fname)
-        self.meta = self.read_metadata(fname)
+        with fname.open("rb", buffering=0) as fl:
+            self._init(fname, _read_head(_Reader(fl)))
+
+    @classmethod
+    def _from_reader(cls, fname: Path, reader: _Reader) -> Ancillary:
+        """Create the ancillary data from a file that is already open.
+
+        The reader is left at the start of the file, keeping the bytes it has read.
+        """
+        anc = cls.__new__(cls)
+        anc._init(fname, _read_head(reader))
+        return anc
+
+    def _init(self, fname: Path, lines: list[str]):
+        self.fastspec_version = self._fastspec_version_from(lines)
+        self.meta = self._metadata_from(fname, lines)
 
         self.data = {
             "adcmax": [],  # np.zeros((self.size, 3), dtype=np.float32),
@@ -159,64 +174,76 @@ class Ancillary:
         if "data_drops" in self.meta:
             self.data["data_drops"] = []  # np.zeros((self.size, 3), dtype=int)
 
+    @staticmethod
+    def _head_lines(fname: Path) -> list[str]:
+        with fname.open("rb", buffering=0) as fl:
+            return _read_head(_Reader(fl))
+
     def _get_fastspec_version(self, fname: Path):
-        with fname.open("r") as fl:
-            first_line = fl.readline()
+        return self._fastspec_version_from(self._head_lines(fname))
+
+    def _fastspec_version_from(self, lines: list[str]):
+        first_line = lines[0] if lines else ""
         if first_line.startswith(self.header_char):
             return first_line.split("FASTSPEC")[-1]
         else:
             return None
 
     def _read_header(self, fname: Path):
+        return self._header_from(fname, self._head_lines(fname))
+
+    def _header_from(self, fname: Path, lines: list[str]):
         out = {}
 
         name_pattern = re.compile(r"[a-zA-Z_]+")
-        with fname.open("r") as fl:
-            type_order = [int, float, str]
+        type_order = [int, float, str]
 
-            for line in fl:
-                if not line.startswith(self.header_char):
+        for line in lines:
+            if not line.startswith(self.header_char):
+                break
+
+            if line.startswith("; FASTSPEC"):
+                name = "fastspec_version"
+                val = line.split()[-1]
+            else:
+                try:
+                    name, val = line.split(": ")
+                except ValueError:
+                    warnings.warn(
+                        f"In file {fname}, item {line} has no value", stacklevel=1
+                    )
+                    name = line.split(":")[0]
+                    val = ""
+
+                name = name_pattern.findall(name)[0]
+
+            for tp in type_order:
+                try:
+                    out[name] = tp(val.split()[0])
                     break
-
-                if line.startswith("; FASTSPEC"):
-                    name = "fastspec_version"
-                    val = line.split()[-1]
-                else:
-                    try:
-                        name, val = line.split(": ")
-                    except ValueError:
-                        warnings.warn(
-                            f"In file {fname}, item {line} has no value", stacklevel=1
-                        )
-                        name = line.split(":")[0]
-                        val = ""
-
-                    name = name_pattern.findall(name)[0]
-
-                for tp in type_order:
-                    try:
-                        out[name] = tp(val.split()[0])
-                        break
-                    except IndexError:
-                        with contextlib.suppress(ValueError):
-                            out[name] = tp(val)
-                    except ValueError:
-                        pass
+                except IndexError:
+                    with contextlib.suppress(ValueError):
+                        out[name] = tp(val)
+                except ValueError:
+                    pass
 
         return out
 
     def read_metadata(self, fname: Path):
         """Read the metadata of the ACQ file."""
-        out = self._read_header(fname)
+        return self._metadata_from(fname, self._head_lines(fname))
 
-        with fname.open("r") as fl:
-            for line in fl:
-                if line.startswith("#"):
-                    comment = CommentLine.read(line)
-                    data = DataLine.read(next(fl), read_spectrum=False)
-                    break
-            else:
-                raise ACQError(f"No comment line found in file {fname}.")
+    def _metadata_from(self, fname: Path, lines: list[str]):
+        out = self._header_from(fname, lines)
+
+        it = iter(lines)
+        for line in it:
+            if line.startswith("#"):
+                comment = CommentLine.read(line)
+                data = DataLine.read(next(it), read_spectrum=False)
+                break
+        else:
+            raise ACQError(f"No comment line found in file {fname}.")
 
         out.update(
             {
@@ -284,9 +311,135 @@ def _warn_nul_padded(fname: Path):
     )
 
 
-def _first_entry(
-    fl: BinaryIO, fastspec: bool, read_spectrum: bool
-) -> tuple[DataEntry, int] | None:
+# Bytes first read at the start of a file, for its header and first entry. This is
+# doubled until they have all been read.
+_HEAD_READ_SIZE = 4096
+
+# Bytes read at a time when reading a whole line.
+_LINE_READ_SIZE = 65536
+
+
+class _Reader:
+    """Read a binary file at a moving position, keeping the bytes read ahead of it.
+
+    This gives control over how much is read, and where: each read of the file is
+    a seek and a read of a given size.
+    """
+
+    def __init__(self, fl: BinaryIO):
+        self.fl = fl
+        self.pos = 0
+        self.ahead = b""  # The bytes of the file from pos.
+        self.eof = False  # Whether ``ahead`` reaches the end of the file.
+
+    def read(self, pos: int, size: int) -> tuple[bytes, bool]:
+        """Read ``size`` bytes at ``pos``, and whether that reaches the end of the file.
+
+        This does not move the reader.
+        """
+        self.fl.seek(pos)
+        data = self.fl.read(size)
+        # An unbuffered read may return fewer bytes than asked for.
+        while 0 < len(data) < size and (more := self.fl.read(size - len(data))):
+            data += more
+        return data, len(data) < size
+
+    def move(self, pos: int, ahead: bytes, eof: bool):
+        """Move to ``pos``, where ``ahead`` has already been read."""
+        self.pos, self.ahead, self.eof = pos, ahead, eof
+
+    def skip(self, n: int):
+        """Move forward ``n`` bytes."""
+        self.pos += n
+        self.ahead = self.ahead[n:]
+
+    def peek(self, size: int) -> bytes:
+        """Return at least the next ``size`` bytes (fewer at the end of the file)."""
+        if len(self.ahead) < size and not self.eof:
+            more, self.eof = self.read(
+                self.pos + len(self.ahead), size - len(self.ahead)
+            )
+            self.ahead += more
+        return self.ahead
+
+    def readline(self) -> bytes:
+        """Return the line at the current position, without moving past it."""
+        end = self.ahead.find(b"\n") + 1
+        parts = [self.ahead]
+        nread = len(self.ahead)
+        while not end and not self.eof:
+            more, self.eof = self.read(self.pos + nread, _LINE_READ_SIZE)
+            if nl := more.find(b"\n") + 1:
+                end = nread + nl
+            parts.append(more)
+            nread += len(more)
+        self.ahead = b"".join(parts)
+        return self.ahead[:end] if end else self.ahead
+
+
+# Line endings when reading in text mode (i.e. universal newlines).
+_TEXT_EOL = re.compile(rb"\r\n|\r|\n")
+
+
+def _text_line_end(data: bytes, start: int, eof: bool) -> int | None:
+    """Return where the line starting at ``start`` ends, as read in text mode.
+
+    This is the offset just after its line ending. Returns None if that is not known
+    from ``data``, the bytes at the start of a file (which reach the end of the file
+    if ``eof``).
+    """
+    match = _TEXT_EOL.search(data, start)
+    if match is None:
+        return len(data) if eof else None
+    # If this is a "\r" at the end of the data, it may be the start of a "\r\n". But
+    # then nothing after it is known, so the head can't end here.
+    return match.end()
+
+
+def _head_end(data: bytes, eof: bool) -> int | None:
+    """Return where the head of a file ends, given the bytes at its start.
+
+    The head is everything up to the first comment line, that line, and the front
+    matter of the data line after it (up to and including " spectrum ", or the whole
+    line if there is no such marker). Returns None if more of the file is needed to
+    find its end.
+    """
+    start = 0
+    while (end := _text_line_end(data, start, eof)) is not None:
+        if end == start:
+            # The end of the file, without a comment line.
+            return end
+        if data.startswith(b"#", start):
+            break
+        start = end
+    else:
+        return None
+
+    data_end = _text_line_end(data, end, eof)
+    sep = _SPECTRUM_SEP.encode("ascii")
+    marker = data.find(sep, end, len(data) if data_end is None else data_end)
+    if marker >= 0:
+        return marker + len(sep)
+    return data_end
+
+
+def _read_head(reader: _Reader) -> list[str]:
+    """Read the head of an ACQ file, as lines of text.
+
+    The head is the header, and the first comment line and front matter of the data
+    line after it (see :func:`_head_end`). It is read in binary, but the lines are as
+    they would be when reading the file in text mode.
+
+    ``reader`` must be at the start of the file, and is left there, keeping the bytes
+    it has read.
+    """
+    size = _HEAD_READ_SIZE
+    while (end := _head_end(reader.peek(size), reader.eof)) is None:
+        size *= 2
+    return io.TextIOWrapper(io.BytesIO(reader.ahead[:end])).readlines()
+
+
+def _first_entry(fl: BinaryIO, fastspec: bool) -> tuple[DataEntry, int] | None:
     """Read the first swpos=0 entry of an ACQ file, and the offset of its data line.
 
     Returns None if there is no such entry. Unlike later entries, a bad first entry
@@ -307,10 +460,7 @@ def _first_entry(
         # The file ends straight after the first swpos=0 comment line.
         return None
 
-    line = line.decode("ascii")
-    if read_spectrum:
-        return DataEntry(comment=cline, data=DataLine.read(line)), offset
-    return _read_entry(cline, line), offset
+    return DataEntry(comment=cline, data=DataLine.read(line.decode("ascii"))), offset
 
 
 def _complete_cycles(
@@ -402,7 +552,7 @@ def _iter_cycles(
     Incomplete cycles and malformed lines are skipped (with a warning for the latter).
     Yields the same as :func:`_complete_cycles`.
     """
-    first = _first_entry(fl, fastspec, read_spectrum=True)
+    first = _first_entry(fl, fastspec)
     if first is None:
         return
 
@@ -436,12 +586,12 @@ def decode_file(
         Useful to set to False if reading multiple files.
     """
     fname = Path(fname)
-    anc = Ancillary(fname)
-
-    fastspec = "data_drops" in anc.meta
     p0, p1, p2 = [], [], []
 
     with fname.open("rb") as fl:
+        anc = Ancillary._from_reader(fname, _Reader(fl))
+        fastspec = "data_drops" in anc.meta
+        fl.seek(0)
         for datas, _ in _iter_cycles(
             fl,
             fastspec=fastspec,
@@ -469,8 +619,10 @@ def decode_file(
 
 
 # Bytes read at the start of each entry: enough for the comment line and the front
-# matter of the data line (together ~160 bytes).
-_HEAD_SIZE = 512
+# matter of the data line (together ~160 bytes). If that's not enough, up to
+# _MAX_HEAD_SIZE bytes are read.
+_HEAD_SIZE = 256
+_MAX_HEAD_SIZE = 4096
 
 
 def _make_entry(cline: CommentLine, dline: DataLine, nchannels: int) -> DataEntry:
@@ -524,41 +676,120 @@ def _line_ending(tail: bytes) -> int:
     return 0
 
 
+def _entry_head(reader: _Reader) -> tuple[bytes, tuple[bytes, int] | None]:
+    """Read the head of the entry at the reader's position.
+
+    Returns its comment line and, if they were found in a small read, the front matter
+    of its data line and the offset of the start of its spectrum.
+    """
+    head = _split_head(reader.peek(_HEAD_SIZE))
+    if head is None:
+        head = _split_head(reader.peek(_MAX_HEAD_SIZE))
+    if head is None:
+        return reader.readline(), None
+    comment, front, spec_start = head
+    return comment, (front, spec_start)
+
+
+def _skip_spectrum(reader: _Reader, spec_start: int, nspec: int) -> bool:
+    """Move past the entry at the reader's position, if its data line ends as expected.
+
+    Since the encoded spectrum of a good data line has exactly 4*nspec characters, we
+    seek straight to where the line should end, and check that it does (reading the
+    head of the next entry at the same time). A data line that is too short would be
+    missed only if the lines after it happen to end exactly where it should have
+    ended, which needs corruption spanning exactly whole lines.
+    """
+    end = reader.pos + spec_start + 4 * nspec
+    tail, eof = reader.read(end, _HEAD_SIZE + 2)
+    if eol := _line_ending(tail):
+        reader.move(end + eol, tail[eol:], eof)
+        return True
+    return False
+
+
+def _next_entry(
+    reader: _Reader,
+    cline: CommentLine,
+    comment: bytes,
+    head: tuple[bytes, int] | None,
+) -> DataEntry | None:
+    """Read the entry at the reader's position, without its spectrum, and move past it.
+
+    ``comment`` and ``head`` are from :func:`_entry_head`, and ``cline`` is the parsed
+    comment line. Returns None at the end of the file, and raises ACQLineError if the
+    entry is bad.
+    """
+    if head is not None:
+        front, spec_start = head
+        dline = DataLine.read(f"{front.decode('ascii')} spectrum ", read_spectrum=False)
+        if _skip_spectrum(reader, spec_start, cline.nspec):
+            return DataEntry(comment=cline, data=dline)
+
+    # The data line is not the expected length: read all of it.
+    reader.skip(len(comment))
+    line = reader.readline()
+    reader.skip(len(line))
+    if not line:
+        # We reached the end of the file.
+        return None
+    return _read_entry(cline, line.decode("ascii"))
+
+
 def _iter_entries_without_spectra(
-    fname: Path, fl: BinaryIO, fastspec: bool
+    fname: Path, reader: _Reader, fastspec: bool
 ) -> Iterator[tuple[DataEntry, int] | None]:
     """Yield the entries of an ACQ file, and their offsets, without their spectra.
 
-    This yields the same entries, offsets and warnings as
-    :func:`_iter_decoded_entries`, but with no spectra. Since the encoded spectrum of
-    a good data line has exactly 4*nspec characters, we seek straight to where the
-    line should end, and check that it does. If it doesn't, we fall back to reading
-    the whole line. (A data line that is too short would be missed only if the lines
-    after it happen to end exactly where it should have ended, which needs corruption
-    spanning exactly whole lines.)
+    This yields the same entries, offsets and warnings as :func:`_iter_cycles` reads
+    (from :func:`_first_entry` and :func:`_iter_decoded_entries`), but with no
+    spectra, reading only the head of each entry wherever possible (see
+    :func:`_skip_spectrum`). If an entry does not have the expected form, we fall back
+    to reading it line by line. ``None`` is yielded for a bad entry. Each offset is
+    that of the start of the entry's data line.
 
-    ``fl`` must be a binary file positioned at the start of a comment line, and
-    ``fname`` is its name (for warnings).
+    ``reader`` must be at the start of the file, and ``fname`` is its name (for
+    warnings).
     """
-    pos = fl.tell()
+    # As in _iter_cycles, start at the first swpos=0 entry. Before that, every comment
+    # line is parsed (so a bad one is an error), and other lines are skipped.
     while True:
-        fl.seek(pos)
-        chunk = fl.read(_HEAD_SIZE)
-        if chunk.startswith(b"\x00"):
+        if not reader.peek(_HEAD_SIZE).startswith(b"#"):
+            line = reader.readline()
+            if not line:
+                return
+            reader.skip(len(line))
+            continue
+
+        comment, head = _entry_head(reader)
+        cline = CommentLine.read(comment.decode("ascii"), fastspec=fastspec)
+        if cline.swpos == 0:
+            break
+
+        # Skip the data line, unless it could be read as a comment line.
+        if (
+            head is None
+            or head[0].startswith(b"#")
+            or not _skip_spectrum(reader, head[1], cline.nspec)
+        ):
+            reader.skip(len(comment))
+
+    # As in _first_entry, a bad first entry is an error.
+    offset = reader.pos + len(comment)
+    entry = _next_entry(reader, cline, comment, head)
+    if entry is None:
+        return
+    yield entry, offset
+
+    while True:
+        if reader.peek(_HEAD_SIZE).startswith(b"\x00"):
             # The rest of the file is NUL-padded (e.g. an interrupted write).
             _warn_nul_padded(fname)
             return
 
-        head = _split_head(chunk)
-        if head is None:
-            # Not a complete, well-formed entry head (e.g. at the end of the file):
-            # read line by line.
-            fl.seek(pos)
-            comment = fl.readline()
-            if not comment:
-                return
-        else:
-            comment, front, spec_start = head
+        comment, head = _entry_head(reader)
+        if not comment:
+            return
 
         try:
             cline = CommentLine.read(comment.decode("ascii"), fastspec=fastspec)
@@ -566,38 +797,20 @@ def _iter_entries_without_spectra(
             # As in decode_file, skip just this line, and try the next as a comment.
             warnings.warn(str(e), stacklevel=1)
             yield None
-            pos += len(comment)
+            reader.skip(len(comment))
             continue
 
-        # The start of the data line.
-        offset = pos + len(comment)
-        if head is not None:
-            dline = DataLine.read(f"{front.decode()} spectrum ", read_spectrum=False)
-            end = pos + spec_start + 4 * cline.nspec
-            fl.seek(end)
-            if eol := _line_ending(fl.read(3)):
-                try:
-                    entry = DataEntry(comment=cline, data=dline), offset
-                except ACQLineError as e:
-                    warnings.warn(str(e), stacklevel=1)
-                    entry = None
-                yield entry
-                pos = end + eol
-                continue
-
-        # The data line is not the expected length: read all of it.
-        fl.seek(offset)
-        line = fl.readline()
-        if not line:
-            # We reached the end of the file.
-            return
+        offset = reader.pos + len(comment)
         try:
-            entry = _read_entry(cline, line.decode("ascii")), offset
+            entry = _next_entry(reader, cline, comment, head)
         except ACQLineError as e:
             warnings.warn(str(e), stacklevel=1)
-            entry = None
-        yield entry
-        pos = fl.tell()
+            yield None
+            continue
+        if entry is None:
+            # We reached the end of the file.
+            return
+        yield entry, offset
 
 
 def _index_file(fname: str | Path) -> tuple[Ancillary, np.ndarray]:
@@ -617,19 +830,17 @@ def _index_file(fname: str | Path) -> tuple[Ancillary, np.ndarray]:
         :func:`_read_spectra` to decode the spectra.
     """
     fname = Path(fname)
-    anc = Ancillary(fname)
-
-    fastspec = "data_drops" in anc.meta
     offsets = []
 
-    # A small buffer, so that each read at an entry does not read far beyond it.
-    with fname.open("rb", buffering=2 * _HEAD_SIZE) as fl:
-        first = _first_entry(fl, fastspec, read_spectrum=False)
-        if first is not None:
-            entries = _iter_entries_without_spectra(fname, fl, fastspec)
-            for datas, offs in _complete_cycles(itertools.chain([first], entries)):
-                anc.append(datas)
-                offsets.append(offs)
+    # Unbuffered, so that each read reads only what is asked for.
+    with fname.open("rb", buffering=0) as fl:
+        reader = _Reader(fl)
+        anc = Ancillary._from_reader(fname, reader)
+        fastspec = "data_drops" in anc.meta
+        entries = _iter_entries_without_spectra(fname, reader, fastspec)
+        for datas, offs in _complete_cycles(entries):
+            anc.append(datas)
+            offsets.append(offs)
 
     anc.complete()
     return anc, np.array(offsets, dtype=np.int64).reshape((-1, 3))
