@@ -1,4 +1,4 @@
-"""Benchmark the I/O done by read_metadata (and the header read shared with decode_file).
+"""Benchmark the I/O of read_metadata, and of the header read shared with decode_file.
 
 Writes synthetic ACQ files and, for each reader, reports the wall time, the number of
 times the file is opened, and (on Linux) the number of read syscalls and bytes read.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import re
 import sys
 import warnings
@@ -20,6 +21,8 @@ from read_acq.read_acq import (
     CommentLine,
     DataLine,
     _index_file,
+    _iter_entries_without_spectra,
+    _Reader,
 )
 
 DATA = Path(__file__).parent / "data"
@@ -277,6 +280,13 @@ def _crlf_starting_mid_cycle(h, e):
     return _crlf(h, e[1:])
 
 
+def _crlf_header_line_split_by_first_read(h, e):
+    # The "\r" of a "\r\n" is the last byte of the first read of the file.
+    prefix = ";--pad: "
+    pad = "x" * (read_acq.read_acq._HEAD_READ_SIZE - len(prefix) - 1)
+    return _join([f"{prefix}{pad}\r\n", *h], e)
+
+
 MODIFIERS: dict[str, Callable] = {
     f.__name__.lstrip("_"): f
     for f in [
@@ -315,6 +325,7 @@ MODIFIERS: dict[str, Callable] = {
         _header_item_without_value,
         _junk_line_before_first_comment,
         _crlf_starting_mid_cycle,
+        _crlf_header_line_split_by_first_read,
     ]
 }
 
@@ -380,6 +391,25 @@ def test_expected_cycles(clean_file: Path, tmp_path: Path):
     assert ancillary["times"][2, 0] == b"2016:080:01:03:00"
 
 
+def test_bad_entry_is_yielded_as_none(clean_file: Path, tmp_path: Path):
+    header, entries = _split(clean_file)
+    path = tmp_path / "bad.acq"
+    path.write_bytes(_truncated_spectrum_mid_file(header, entries).encode())
+
+    with (
+        path.open("rb", buffering=0) as fl,
+        pytest.warns(UserWarning, match="nspec and length of spectrum do not match"),
+    ):
+        out = list(_iter_entries_without_spectra(path, _Reader(fl), fastspec=True))
+
+    assert len(out) == len(entries)
+    for i, entry in enumerate(out):
+        if i == 7:
+            assert entry is None
+        else:
+            assert entry.data.time == entries[i][1][:17]
+
+
 def _no_swpos0_entries(h, e):
     return _join(h, [entry for entry in e if not entry[0].startswith("# swpos 0")])
 
@@ -434,7 +464,7 @@ def _outcome(func, path: Path):
         warnings.simplefilter("always")
         try:
             func(path)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 (compare whatever is raised)
             raised = (type(e), str(e))
         else:
             raised = None
@@ -477,7 +507,15 @@ def _first_spectrum_truncated_after_leading_entries(h, e):
 
 
 def _leading_comment_malformed(h, e):
-    e[1][0] = "# garbage\n"
+    # Not the first comment line, which is read for the metadata.
+    e[2][0] = "# garbage\n"
+    return _join(h, e[1:])
+
+
+def _leading_data_line_read_as_comment_line(h, e):
+    # decode_file reads this data line as the first swpos=0 comment line, so the
+    # comment line after it is read as a data line.
+    e[2][1] = f"{e[3][0].rstrip()} spectrum {'A' * 4 * NFREQ}\n"
     return _join(h, e[1:])
 
 
@@ -504,6 +542,7 @@ BAD_FIRST_ENTRY: dict[str, Callable] = {
         _first_comment_malformed,
         _first_spectrum_truncated_after_leading_entries,
         _leading_comment_malformed,
+        _leading_data_line_read_as_comment_line,
         _first_comment_is_last_line,
         _no_comment_lines,
         _first_data_line_nul_padded,
@@ -687,6 +726,21 @@ def test_ancillary_methods_unchanged(clean_file: Path):
 
 
 # --- I/O: how often the file is opened, and how much of it is read ---------------
+
+
+class _TrickleFile(io.BytesIO):
+    """A file whose reads return at most a few bytes, as unbuffered reads may."""
+
+    def read(self, size=-1):
+        return super().read(min(size, 7))
+
+
+@pytest.mark.parametrize(("pos", "size"), [(0, 20), (90, 20), (100, 20), (95, 5)])
+def test_reader_reads_all_bytes_asked_for(pos, size):
+    data = bytes(range(100))
+    reader = _Reader(_TrickleFile(data))
+    assert reader.read(pos, size) == (data[pos : pos + size], pos + size > len(data))
+
 
 _opened: list[str] | None = None
 
