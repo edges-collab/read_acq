@@ -12,6 +12,7 @@ import pytest
 
 import read_acq
 from read_acq import decode_file, encode, read_metadata
+from read_acq.read_acq import ACQLineError, _index_file, _read_spectra
 
 DATA = Path(__file__).parent / "data"
 
@@ -234,29 +235,39 @@ def clean_file(tmp_path_factory) -> Path:
     return _write_synthetic(tmp_path_factory.mktemp("meta") / "clean.acq")
 
 
-def _decode_and_read(path: Path):
-    with warnings.catch_warnings(record=True) as w_decode:
+def _recording_warnings(func, *args):
+    with warnings.catch_warnings(record=True) as ws:
         warnings.simplefilter("always")
-        _, _, anc = decode_file(path, progress=False)
-    with warnings.catch_warnings(record=True) as w_meta:
-        warnings.simplefilter("always")
-        meta, ancillary = read_metadata(path)
-    return anc, (meta, ancillary), w_decode, w_meta
+        out = func(*args)
+    return out, [(w.category, str(w.message)) for w in ws]
 
 
 def _assert_matches_decode_file(path: Path):
-    anc, (meta, ancillary), w_decode, w_meta = _decode_and_read(path)
+    """Check read_metadata and _index_file against decode_file.
 
-    assert meta == anc.meta
-    assert ancillary.keys() == anc.data.keys()
-    for key, val in anc.data.items():
-        assert ancillary[key].dtype == val.dtype, key
-        np.testing.assert_array_equal(ancillary[key], val, err_msg=key)
+    Both must give the same ancillary data and warnings, and the offsets from
+    _index_file must point at the spectra that decode_file decodes.
+    """
+    (_, p, anc), w_decode = _recording_warnings(decode_file, path, False)
+    (meta, ancillary), w_meta = _recording_warnings(read_metadata, path)
+    (anc_idx, offsets), w_index = _recording_warnings(_index_file, path)
 
-    def _msgs(ws):
-        return [(w.category, str(w.message)) for w in ws]
+    for m, a in [(meta, ancillary), (anc_idx.meta, anc_idx.data)]:
+        assert m == anc.meta
+        assert a.keys() == anc.data.keys()
+        for key, val in anc.data.items():
+            assert a[key].dtype == val.dtype, key
+            np.testing.assert_array_equal(a[key], val, err_msg=key)
 
-    assert _msgs(w_meta) == _msgs(w_decode)
+    assert w_meta == w_decode
+    assert w_index == w_decode
+
+    ncycles = len(anc.data["times"])
+    assert offsets.shape == (ncycles, 3)
+    if ncycles:
+        spectra = _read_spectra(path, offsets, anc.meta["nfreq"])
+        np.testing.assert_array_equal(spectra, np.transpose(p, (0, 2, 1)))
+
     return meta, ancillary
 
 
@@ -312,6 +323,20 @@ def test_no_complete_first_entry(modifier, clean_file: Path, tmp_path: Path):
         assert len(val) == 0
 
 
+@pytest.mark.parametrize(
+    "reader", [lambda p: decode_file(p, progress=False), read_metadata, _index_file]
+)
+def test_bad_first_entry_raises(reader, clean_file: Path, tmp_path: Path):
+    """As in decode_file, a bad first entry is an error, not just a warning."""
+    header, entries = _split(clean_file)
+    entries[0][1] = _truncate_spectrum(entries[0][1])
+    path = tmp_path / "bad_first.acq"
+    path.write_bytes(_join(header, entries).encode())
+
+    with pytest.raises(ACQLineError, match="nspec and length of spectrum"):
+        reader(path)
+
+
 def test_varying_comment_line_lengths(tmp_path: Path):
     """Comment lines change length with the sign of adcmin and width of data_drops."""
     ntimes = 6
@@ -347,12 +372,17 @@ def _bytes_read() -> int:
     not sys.platform.startswith("linux") or not Path("/proc/self/io").exists(),
     reason="needs /proc/self/io to count bytes read",
 )
-def test_reads_small_fraction_of_file(tmp_path: Path):
+@pytest.mark.parametrize(
+    "reader",
+    [read_metadata, lambda path: (None, _index_file(path)[0].data)],
+    ids=["read_metadata", "_index_file"],
+)
+def test_reads_small_fraction_of_file(reader, tmp_path: Path):
     path = _write_synthetic(tmp_path / "big.acq", ntimes=40, nfreq=32768)
     size = path.stat().st_size
 
     before = _bytes_read()
-    _, ancillary = read_metadata(path)
+    _, ancillary = reader(path)
     nread = _bytes_read() - before
 
     assert len(ancillary["times"]) == 40
