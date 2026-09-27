@@ -13,7 +13,7 @@ _c_decode = cdll.decode
 _c_decode.restype = ctypes.c_int
 _c_decode.argtypes = [
     ctypes.c_char_p,
-    np.ctypeslib.ndpointer(np.float64),
+    np.ctypeslib.ndpointer(np.float64, flags="C_CONTIGUOUS"),
 ]
 
 _c_encode = cdll.encode
@@ -44,10 +44,28 @@ def _decode_line(line: str) -> np.ndarray:
         arbitrarily scaled linear powers.
     """
     out = np.zeros(len(line) // 4)
-    if _c_decode(ctypes.c_char_p(line.encode("ascii")), np.ascontiguousarray(out)) > 0:
-        raise SystemError("C decoder exited with an error!")
-
+    _decode_into(line.encode("ascii"), out)
     return out
+
+
+def _decode_into(line: bytes, out: np.ndarray) -> None:
+    """
+    Decode a pre-parsed, uencoded byte-string into a pre-allocated array.
+
+    Each group of four characters decodes independently to one value, so any
+    four-character-aligned substring of a spectrum may be passed to decode just those
+    channels.
+
+    Parameters
+    ----------
+    line : bytes
+        The uencoded data, with no leading spaces.
+    out : np.ndarray
+        A contiguous float64 array of length at least ``len(line) // 4``, into which
+        the decoded values are written.
+    """
+    if _c_decode(ctypes.c_char_p(line), out) > 0:
+        raise SystemError("C decoder exited with an error!")
 
 
 def _encode(data: np.ndarray) -> str:
