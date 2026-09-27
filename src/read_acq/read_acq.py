@@ -12,7 +12,7 @@ import attrs
 import numpy as np
 import tqdm
 
-from .codec import _decode_line, _encode
+from .codec import _decode_into, _decode_line, _encode
 
 
 class ACQError(Exception):
@@ -265,6 +265,99 @@ class Ancillary:
             )
 
 
+_SPECTRUM_SEP = " spectrum "
+
+
+def _encoded_length(line: str) -> int:
+    """Return the number of encoded values in a data line, without decoding them."""
+    start = line.index(_SPECTRUM_SEP) + len(_SPECTRUM_SEP)
+    return len(line[start:].lstrip()) // 4
+
+
+def _iter_cycles(
+    fl,
+    fastspec: bool,
+    read_spectrum: bool = True,
+    progress: bool = True,
+    leave_progress: bool = True,
+    desc: str = "",
+):
+    """Iterate over the complete switch cycles in an open (binary-mode) ACQ file.
+
+    Incomplete cycles and malformed lines are skipped (with a warning for the latter).
+
+    Yields
+    ------
+    datas : tuple of DataEntry
+        The three entries (swpos 0, 1, 2) of a complete cycle. Their spectra are
+        None unless ``read_spectrum`` is True.
+    offsets : tuple of int
+        The byte offsets of the start of each of the three data lines in the file.
+    """
+    # First find the first swpos=0 line.
+    for line in fl:
+        if line.startswith(b"#"):
+            cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
+            if cline.swpos == 0:
+                break
+
+    offset = fl.tell()
+    data = DataLine.read(next(fl).decode("ascii"), read_spectrum=read_spectrum)
+    data = DataEntry(comment=cline, data=data)
+
+    datas = (data,)
+    offsets = (offset,)
+    for line in tqdm.tqdm(
+        fl,
+        disable=not progress,
+        desc=desc,
+        unit="lines",
+        leave=leave_progress,
+    ):
+        cline = CommentLine.read(line.decode("ascii"), fastspec=fastspec)
+        offset = fl.tell()
+        try:
+            dline = next(fl).decode("ascii")
+            data = DataLine.read(dline, read_spectrum=read_spectrum)
+        except StopIteration:
+            # We reached the end of the file.
+            break
+        except ACQLineError as e:
+            # Something was bad in this line. Remove this iteration from the data
+            # But try to keep going in the file.
+            warnings.warn(str(e), stacklevel=1)
+            datas = ()
+            continue
+
+        try:
+            data = DataEntry(comment=cline, data=data)
+            # Without the spectrum, DataEntry can't validate its length, so do it here.
+            if not read_spectrum and _encoded_length(dline) != cline.nspec:
+                raise ACQLineError("nspec and length of spectrum do not match")
+        except ACQLineError as e:
+            warnings.warn(str(e), stacklevel=1)
+            datas = ()
+            continue
+
+        if data.comment.swpos == len(datas):
+            # Add this to the cycle
+            datas += (data,)
+            offsets = (*offsets[: len(datas) - 1], offset)
+        elif data.comment.swpos == 0:
+            # Discard the previous cycle and start again -- it was incomplete.
+            datas = (data,)
+            offsets = (offset,)
+        else:
+            # Discard everything and keep going.
+            datas = ()
+            continue
+
+        if data.comment.swpos == 2:
+            # We have a full cycle
+            yield datas, offsets
+            datas = ()
+
+
 def decode_file(
     fname: str | Path,
     progress: bool = True,
@@ -293,64 +386,18 @@ def decode_file(
     fastspec = "data_drops" in anc.meta
     p0, p1, p2 = [], [], []
 
-    with fname.open("r") as fl:
-        # First find the first swpos=0 line.
-
-        for line in fl:
-            if line.startswith("#"):
-                cline = CommentLine.read(line, fastspec=fastspec)
-                if cline.swpos == 0:
-                    break
-
-        data = DataLine.read(next(fl))
-        data = DataEntry(comment=cline, data=data)
-
-        datas = (data,)
-        for line in tqdm.tqdm(
+    with fname.open("rb") as fl:
+        for datas, _ in _iter_cycles(
             fl,
-            disable=not progress,
-            desc=f"Reading {Path(fname).name}",
-            unit="lines",
-            leave=leave_progress,
+            fastspec=fastspec,
+            progress=progress,
+            leave_progress=leave_progress,
+            desc=f"Reading {fname.name}",
         ):
-            cline = CommentLine.read(line, fastspec=fastspec)
-            try:
-                data = DataLine.read(next(fl))
-            except StopIteration:
-                # We reached the end of the file.
-                break
-            except ACQLineError as e:
-                # Something was bad in this line. Remove this iteration from the data
-                # But try to keep going in the file.
-                warnings.warn(str(e), stacklevel=1)
-                datas = ()
-                continue
-
-            try:
-                data = DataEntry(comment=cline, data=data)
-            except ACQLineError as e:
-                warnings.warn(str(e), stacklevel=1)
-                datas = ()
-                continue
-
-            if data.comment.swpos == len(datas):
-                # Add this to the cycle
-                datas += (data,)
-            elif data.comment.swpos == 0:
-                # Discard the previous cycle and start again -- it was incomplete.
-                datas = (data,)
-            else:
-                # Discard everything and keep going.
-                datas = ()
-                continue
-
-            if data.comment.swpos == 2:
-                # We have a full cycle
-                p0.append(datas[0].data.spectrum)
-                p1.append(datas[1].data.spectrum)
-                p2.append(datas[2].data.spectrum)
-                anc.append(datas)
-                datas = ()
+            p0.append(datas[0].data.spectrum)
+            p1.append(datas[1].data.spectrum)
+            p2.append(datas[2].data.spectrum)
+            anc.append(datas)
 
     anc.complete()
     p0 = np.array(p0)
@@ -364,6 +411,88 @@ def decode_file(
         q = (p0 - p1) / (p2 - p1)
 
     return q.T, [p0.T, p1.T, p2.T], anc
+
+
+def _index_file(
+    fname: str | Path,
+    progress: bool = False,
+    leave_progress: bool = True,
+) -> tuple[Ancillary, np.ndarray]:
+    """Read the ancillary data of an ACQ file without decoding any spectra.
+
+    Returns
+    -------
+    anc : Ancillary
+        The (completed) ancillary data, with one row per complete switch cycle, exactly
+        as returned by :func:`decode_file`.
+    offsets : np.ndarray
+        An integer array of shape ``(ncycles, 3)`` giving the byte offset of the data
+        line for each switch position of each cycle. Pass (a subset of) these to
+        :func:`_read_spectra` to decode the spectra.
+    """
+    fname = Path(fname)
+    anc = Ancillary(fname)
+
+    fastspec = "data_drops" in anc.meta
+    offsets = []
+
+    with fname.open("rb") as fl:
+        for datas, offs in _iter_cycles(
+            fl,
+            fastspec=fastspec,
+            read_spectrum=False,
+            progress=progress,
+            leave_progress=leave_progress,
+            desc=f"Indexing {fname.name}",
+        ):
+            anc.append(datas)
+            offsets.append(offs)
+
+    anc.complete()
+    return anc, np.array(offsets, dtype=np.int64).reshape((-1, 3))
+
+
+def _read_spectra(
+    fname: str | Path,
+    offsets: np.ndarray,
+    nchannels: int,
+    channels: slice = slice(None),
+) -> np.ndarray:
+    """Decode the spectra at given byte offsets of an ACQ file.
+
+    Parameters
+    ----------
+    fname : str or Path
+        The ACQ file.
+    offsets : np.ndarray
+        Integer array of shape ``(ntimes, 3)`` of data-line offsets, as returned by
+        :func:`_index_file`.
+    nchannels : int
+        The total number of channels in each spectrum.
+    channels : slice
+        A contiguous (unit-step) range of channels to decode.
+
+    Returns
+    -------
+    np.ndarray
+        The decoded spectra, with shape ``(3, ntimes, nchannels_selected)``.
+    """
+    start, stop, step = channels.indices(nchannels)
+    if step != 1:
+        raise ValueError("channels must be a contiguous slice")
+
+    out = np.zeros((offsets.shape[1], offsets.shape[0], max(stop - start, 0)))
+    sep = _SPECTRUM_SEP.encode("ascii")
+
+    with Path(fname).open("rb") as fl:
+        for i, offs in enumerate(offsets):
+            for j, off in enumerate(offs):
+                fl.seek(off)
+                line = fl.readline()
+                enc = line[line.index(sep) + len(sep) :].lstrip()
+                _decode_into(enc[4 * start : 4 * stop], out[j, i])
+
+    return out
 
 
 def encode(

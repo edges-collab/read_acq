@@ -114,6 +114,9 @@ ignore = [
     "DTZ",   # ignore datetime in tests
     "T",     # print statements
 ]
+"benchmarks/*.py" = [
+    "T",  # print statements
+]
 "docs/conf.py" = [
     "A",  # conf.py can shadow builtins
     "ERA",
