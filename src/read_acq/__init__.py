@@ -1,11 +1,17 @@
 """Package providing functionality for reading .ACQ format files."""
 
-__all__ = ["decode_file", "encode", "read_acq_to_gsdata", "write_gsdata_to_acq"]
+__all__ = [
+    "decode_file",
+    "encode",
+    "read_acq_to_gsdata",
+    "read_metadata",
+    "write_gsdata_to_acq",
+]
 
 from importlib.metadata import PackageNotFoundError, version
 
 from .gsdata import read_acq_to_gsdata, write_gsdata_to_acq
-from .read_acq import decode_file, encode
+from .read_acq import decode_file, encode, read_metadata
 
 try:
     __version__ = version(__name__)
