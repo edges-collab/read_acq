@@ -216,6 +216,7 @@ class Ancillary:
                     val = ""
 
                 name = name_pattern.findall(name)[0]
+                val = val.strip()
 
             for tp in type_order:
                 try:
@@ -952,7 +953,11 @@ def encode(
 
     with Path(filename).open("w") as fl:
         # Write the header
-        fl.writelines(f";--{k}: {v}\n" for k, v in meta.items())
+        # Write an empty value with no space after the colon, as in the files read.
+        fl.writelines(
+            f";--{k}: {v}\n" if str(v).strip() else f";--{k}:\n"
+            for k, v in meta.items()
+        )
 
         # Go through each time
         for i in range(len(p[0])):
