@@ -2,22 +2,28 @@
 
 **Read EDGES ACQ spectrum files.**
 
-[![image](https://travis-ci.org/edges-collab/read_acq.svg?branch=master)](https://travis-ci.org/edges-collab/read_acq)
-
-[![image](https://codecov.io/gh/edges-collab/read_acq/branch/master/graph/badge.svg)](https://travis-ci.org/edges-collabcodecov.io/gh/edges-collab/read_acq)
-
-[![image](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://github.com/edges-collab/read_acq/actions/workflows/test_suite.yaml/badge.svg?branch=main)](https://github.com/edges-collab/read_acq/actions/workflows/test_suite.yaml)
+[![codecov](https://codecov.io/gh/edges-collab/read_acq/branch/main/graph/badge.svg)](https://codecov.io/gh/edges-collab/read_acq)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 ## Installation
 
 In a new/existing python environment, run `pip install
 git+https://github.com/edges-collab/read_acq`.
 
-If you wish to develop `read_acq`, do the following:
+If you wish to develop `read_acq`, install it in editable mode. `read_acq` is built
+with `meson-python`, whose editable installs rebuild the C extension when the package
+is imported. That rebuild uses the build tools of the environment you install into,
+so install them first and turn off build isolation:
 
     git clone https://github.com/edges-collab/read_acq
     cd read_acq
-    pip install -e .
+    pip install meson-python meson ninja numpy setuptools setuptools-scm
+    pip install --no-build-isolation --group dev -e .
+
+(`--group` needs pip >= 25.1.) Without `--no-build-isolation` the install succeeds,
+but importing `read_acq` fails, because the build tools it used were in a temporary
+environment that no longer exists.
 
 ## Usage
 

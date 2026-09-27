@@ -1,13 +1,19 @@
 """Wrapper for C-code that does the encoding-decoding."""
 
 import ctypes
-from pathlib import Path
+from importlib.resources import as_file, files
 
 import numpy as np
 
-cdll = min(Path(__file__).parent.glob("libdecode.*"))
-
-cdll = ctypes.CDLL(str(cdll.resolve()))
+# Find the compiled library through importlib.resources rather than __file__: in an
+# editable install, __file__ is in the source tree but the library is in the build
+# directory, which the editable loader maps into the package's resources.
+_lib = min(
+    (p for p in files(__package__).iterdir() if p.name.startswith("libdecode.")),
+    key=lambda p: p.name,
+)
+with as_file(_lib) as _path:
+    cdll = ctypes.CDLL(str(_path))
 
 _c_decode = cdll.decode
 _c_decode.restype = ctypes.c_int
