@@ -158,6 +158,12 @@ def _extra_spaces_before_spectrum(h, e):
     return _join(h, e)
 
 
+def _tab_before_spectrum(h, e):
+    # Stripped when decoding, but not a plain space, so not handled by the fast path.
+    e[7][1] = e[7][1].replace(" spectrum ", " spectrum \t", 1)
+    return _join(h, e)
+
+
 def _crlf(h, e):
     return _join(h, e).replace("\n", "\r\n")
 
@@ -184,6 +190,7 @@ MODIFIERS: dict[str, Callable] = {
         _starts_with_extra_swpos0,
         _wider_front_matter_mid_file,
         _extra_spaces_before_spectrum,
+        _tab_before_spectrum,
         _crlf,
         _only_partial_cycle,
     ]
@@ -249,6 +256,31 @@ def test_expected_cycles(clean_file: Path, tmp_path: Path):
     # The third cycle is lost, the rest are kept.
     assert ancillary["times"].shape == (5, 3)
     assert ancillary["times"][2, 0] == b"2016:080:01:03:00"
+
+
+def _no_swpos0_entries(h, e):
+    return _join(h, [entry for entry in e if not entry[0].startswith("# swpos 0")])
+
+
+def _swpos0_comment_at_end_only(h, e):
+    return _join(h, e[1:3]) + e[3][0]
+
+
+@pytest.mark.parametrize("modifier", [_no_swpos0_entries, _swpos0_comment_at_end_only])
+def test_no_complete_first_entry(modifier, clean_file: Path, tmp_path: Path):
+    """With no swpos=0 entry to start from, there are no cycles.
+
+    (decode_file leaks a StopIteration for these files, so we can't compare to it.)
+    """
+    header, entries = _split(clean_file)
+    path = tmp_path / "no_start.acq"
+    path.write_bytes(modifier(header, entries).encode())
+
+    meta, ancillary = read_metadata(path)
+    assert meta["nfreq"] == NFREQ
+    assert ancillary.keys() == {"adcmax", "adcmin", "times", "data_drops"}
+    for val in ancillary.values():
+        assert len(val) == 0
 
 
 def test_varying_comment_line_lengths(tmp_path: Path):
