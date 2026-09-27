@@ -53,3 +53,11 @@ By default, this function will also write the file in `.mat` format, but
 you can turn that off by providing `write_formats=[]`. The output is a
 `numpy` array of the data. Several more options are provided, use
 `help(decode_file)` in an interpreter to see all the options.
+
+To get only the metadata and the per-cycle ancillary data (times, ADC max/min
+and data drops) without the spectra, use `read_metadata`. It seeks over the
+spectra rather than reading them, so it is much faster than `decode_file`:
+
+    >>> from read_acq import read_metadata
+    >>> meta, ancillary = read_metadata("my_data.acq")
+    >>> ncycles = len(ancillary["times"])
