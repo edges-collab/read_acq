@@ -596,7 +596,11 @@ def test_bad_first_entry_raises_as_decode_file(
 
 
 class _TextModeHeader:
-    """The text-mode header parsing of Ancillary before #160, as a reference."""
+    """The text-mode header parsing of Ancillary before #160, as a reference.
+
+    The one deliberate change since is that values are stripped (#165), so that a
+    value of only whitespace, such as a line ending, is read as ``""``.
+    """
 
     header_char = ";"
 
@@ -631,6 +635,7 @@ class _TextModeHeader:
                         name = line.split(":")[0]
                         val = ""
                     name = name_pattern.findall(name)[0]
+                    val = val.strip()
                 for tp in [int, float, str]:
                     try:
                         out[name] = tp(val.split()[0])
@@ -752,6 +757,31 @@ def test_ancillary_methods_unchanged(clean_file: Path):
     assert anc.read_metadata(clean_file) == ref.meta
     assert anc._read_header(clean_file) == ref._read_header(clean_file)
     assert anc._get_fastspec_version(clean_file) == ref.fastspec_version
+
+
+@pytest.mark.parametrize("line", [";--d:\n", ";--d: \n", ";--d:  \r\n"])
+def test_header_item_without_value_is_empty(line, clean_file: Path, tmp_path: Path):
+    header, entries = _split(clean_file)
+    path = tmp_path / "blank.acq"
+    path.write_bytes(_join([*header, line], entries).encode())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert Ancillary(path).meta["d"] == ""
+
+
+def test_encode_roundtrips_header(tmp_path: Path):
+    _, p, anc = decode_file(DATA / "sample.acq", progress=False)
+    assert anc.meta["output_file"] == ""
+    assert anc.meta["stop_time"] == ""
+
+    path = tmp_path / "copy.acq"
+    encode(path, [x.T for x in p], anc.meta, anc.data)
+    header = [ln for ln in path.read_text().splitlines() if ln.startswith(";")]
+    assert ";--output_file:" in header
+    assert ";--stop_time:" in header
+
+    _, _, anc2 = decode_file(path, progress=False)
+    assert anc2.meta == anc.meta
 
 
 # --- I/O: how often the file is opened, and how much of it is read ---------------
