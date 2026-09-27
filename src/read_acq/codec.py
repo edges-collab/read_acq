@@ -5,9 +5,7 @@ from importlib.resources import as_file, files
 
 import numpy as np
 
-# Find the compiled library through importlib.resources rather than __file__: in an
-# editable install, __file__ is in the source tree but the library is in the build
-# directory, which the editable loader maps into the package's resources.
+# Find the compiled library through importlib.resources rather than __file__.
 _lib = min(
     (p for p in files(__package__).iterdir() if p.name.startswith("libdecode.")),
     key=lambda p: p.name,
