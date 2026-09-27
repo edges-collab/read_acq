@@ -274,6 +274,11 @@ def test_bad_data_line():
         DataLine.read("this is not a data line spectrum  ", read_spectrum=False)
 
 
+def test_incomplete_data_line_message_truncated():
+    with pytest.raises(ACQLineError, match=r"^Could not parse line: 'a{100}' --"):
+        DataLine.read("a" * 5000, read_spectrum=False)
+
+
 def test_read_data_entry(pxspec_comment_line, data_line_prefix):
     data_entry = DataEntry.read(
         (pxspec_comment_line, data_line_prefix), read_spectrum=False

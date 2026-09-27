@@ -99,7 +99,7 @@ class DataLine:
             front, back = line.split(" spectrum ")
         except ValueError:
             raise ACQLineError(
-                f"Could not parse line: '{line}' -- probably incomplete"
+                f"Could not parse line: '{line[:100]}' -- probably incomplete"
             ) from None
 
         match = re.match(cls.regex, front)
