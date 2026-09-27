@@ -99,7 +99,7 @@ class DataLine:
             front, back = line.split(" spectrum ")
         except ValueError:
             raise ACQLineError(
-                "Could not parse line: '{line}' -- probably incomplete"
+                f"Could not parse line: '{line[:100]}' -- probably incomplete"
             ) from None
 
         match = re.match(cls.regex, front)
@@ -313,7 +313,22 @@ def decode_file(
             unit="lines",
             leave=leave_progress,
         ):
-            cline = CommentLine.read(line, fastspec=fastspec)
+            if line.startswith("\x00"):
+                # The rest of the file is NUL-padded (e.g. an interrupted write).
+                warnings.warn(
+                    f"File {fname} contains NUL bytes; it was probably not fully "
+                    "written. Returning the complete cycles read so far.",
+                    stacklevel=1,
+                )
+                break
+
+            try:
+                cline = CommentLine.read(line, fastspec=fastspec)
+            except ACQError as e:
+                warnings.warn(str(e), stacklevel=1)
+                datas = ()
+                continue
+
             try:
                 data = DataLine.read(next(fl))
             except StopIteration:
