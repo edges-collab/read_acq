@@ -137,6 +137,59 @@ def test_incomplete_specline_file(incomplete_specline_file: Path):
     assert q.T.shape == (4, 100)
 
 
+@pytest.mark.parametrize(
+    ("n_extra_lines", "msg"),
+    [(0, "NUL bytes"), (2, "NUL bytes"), (3, "Could not parse line")],
+)
+def test_nul_padded_file(
+    sample_acq_file: Path, tmp_path: Path, n_extra_lines: int, msg: str
+):
+    """Files whose tail is NUL bytes (e.g. interrupted writes) should still be read.
+
+    See https://github.com/edges-collab/read_acq/issues/156.
+    """
+    with sample_acq_file.open("r") as fl:
+        lines = fl.readlines()
+
+    nheader = sum(line.startswith(";") for line in lines)
+    # Keep the header and two complete cycles (6 lines each), plus possibly some
+    # lines of an incomplete third cycle, then pad the rest with NUL bytes.
+    lines = lines[: nheader + 12 + n_extra_lines]
+
+    new = tmp_path / "nul_padded.acq"
+    with new.open("wb") as fl:
+        fl.write("".join(lines).encode())
+        fl.write(b"\x00" * 5000)
+
+    with pytest.warns(UserWarning, match=msg):
+        q, p, _ = decode_file(new, progress=False)
+
+    for pp in p:
+        assert pp.T.shape == (2, 100)
+    assert q.T.shape == (2, 100)
+
+
+def test_bad_comment_line_in_file(sample_acq_file: Path, tmp_path: Path):
+    with sample_acq_file.open("r") as fl:
+        lines = fl.readlines()
+
+    nheader = sum(line.startswith(";") for line in lines)
+    # Corrupt the swpos=0 comment line of the third cycle.
+    lines[nheader + 12] = "# garbage\n"
+
+    new = tmp_path / "bad_comment.acq"
+    with new.open("w") as fl:
+        fl.writelines(lines)
+
+    with pytest.warns(UserWarning, match="Could not parse line"):
+        q, p, _ = decode_file(new, progress=False)
+
+    # We lost one of the five cycles.
+    for pp in p:
+        assert pp.T.shape == (4, 100)
+    assert q.T.shape == (4, 100)
+
+
 @pytest.fixture(scope="module")
 def pxspec_comment_line() -> str:
     """Return a real comment-line from a pxspec-output file.
