@@ -101,7 +101,7 @@ class DataLine:
             front, back = line.split(" spectrum ")
         except ValueError:
             raise ACQLineError(
-                "Could not parse line: '{line}' -- probably incomplete"
+                f"Could not parse line: '{line[:100]}' -- probably incomplete"
             ) from None
 
         match = re.match(cls.regex, front)
@@ -314,7 +314,7 @@ def decode_file(
             unit="lines",
             leave=leave_progress,
         )
-        entries = _iter_entries(fl, lines, fastspec)
+        entries = _iter_entries(fname, fl, lines, fastspec)
         for datas in _complete_cycles(itertools.chain([data], entries)):
             p0.append(datas[0].data.spectrum)
             p1.append(datas[1].data.spectrum)
@@ -365,13 +365,32 @@ def _complete_cycles(
             datas = ()
 
 
-def _iter_entries(fl, lines, fastspec: bool) -> Iterator[DataEntry | None]:
+def _warn_nul_padded(fname: Path):
+    warnings.warn(
+        f"File {fname} contains NUL bytes; it was probably not fully "
+        "written. Returning the complete cycles read so far.",
+        stacklevel=2,
+    )
+
+
+def _iter_entries(fname: Path, fl, lines, fastspec: bool) -> Iterator[DataEntry | None]:
     """Yield the (decoded) entries of an ACQ text file, or None for bad entries.
 
     ``lines`` iterates over ``fl``, which must be positioned at a comment line.
     """
     for line in lines:
-        cline = CommentLine.read(line, fastspec=fastspec)
+        if line.startswith("\x00"):
+            # The rest of the file is NUL-padded (e.g. an interrupted write).
+            _warn_nul_padded(fname)
+            return
+
+        try:
+            cline = CommentLine.read(line, fastspec=fastspec)
+        except ACQError as e:
+            warnings.warn(str(e), stacklevel=1)
+            yield None
+            continue
+
         try:
             data = DataLine.read(next(fl))
             data = DataEntry(comment=cline, data=data)
@@ -400,6 +419,12 @@ def _make_entry(cline: CommentLine, dline: DataLine, nchannels: int) -> DataEntr
     if nchannels != cline.nspec:
         raise ACQLineError("nspec and length of spectrum do not match")
     return entry
+
+
+def _as_text(line: bytes) -> str:
+    """Decode a line read in binary mode as a line read in text mode would be."""
+    line = line.decode()
+    return f"{line[:-2]}\n" if line.endswith("\r\n") else line
 
 
 def _read_entry(cline: CommentLine, line: str) -> DataEntry:
@@ -444,7 +469,7 @@ def _line_ending(tail: bytes) -> int:
 
 
 def _iter_entries_without_spectra(
-    fl: BinaryIO, fastspec: bool
+    fname: Path, fl: BinaryIO, fastspec: bool
 ) -> Iterator[DataEntry | None]:
     """Yield the entries of an ACQ file without reading their spectra.
 
@@ -455,17 +480,40 @@ def _iter_entries_without_spectra(
     short would be missed only if the lines after it happen to end exactly where it
     should have ended, which needs corruption spanning exactly whole lines.)
 
-    ``fl`` must be a binary file positioned at the start of a comment line.
+    ``fl`` must be a binary file positioned at the start of a comment line, and
+    ``fname`` is its name (for warnings).
     """
     pos = fl.tell()
     while True:
         fl.seek(pos)
-        head = _split_head(fl.read(_HEAD_SIZE))
-        if head is not None:
-            comment, front, spec_start = head
-            cline = CommentLine.read(comment.decode(), fastspec=fastspec)
-            dline = DataLine.read(f"{front.decode()} spectrum ", read_spectrum=False)
+        chunk = fl.read(_HEAD_SIZE)
+        if chunk.startswith(b"\x00"):
+            # The rest of the file is NUL-padded (e.g. an interrupted write).
+            _warn_nul_padded(fname)
+            return
 
+        head = _split_head(chunk)
+        if head is None:
+            # Not a complete, well-formed entry head (e.g. at the end of the file):
+            # read line by line.
+            fl.seek(pos)
+            comment = fl.readline()
+            if not comment:
+                return
+        else:
+            comment, front, spec_start = head
+
+        try:
+            cline = CommentLine.read(_as_text(comment), fastspec=fastspec)
+        except ACQError as e:
+            # As in decode_file, skip just this line, and try the next as a comment.
+            warnings.warn(str(e), stacklevel=1)
+            yield None
+            pos += len(comment)
+            continue
+
+        if head is not None:
+            dline = DataLine.read(f"{front.decode()} spectrum ", read_spectrum=False)
             end = pos + spec_start + 4 * cline.nspec
             fl.seek(end)
             if eol := _line_ending(fl.read(3)):
@@ -478,23 +526,14 @@ def _iter_entries_without_spectra(
                 pos = end + eol
                 continue
 
-            # The data line is not the expected length: read all of it.
-            fl.seek(pos + len(comment))
-        else:
-            # Not a complete, well-formed entry head (e.g. at the end of the file):
-            # read line by line.
-            fl.seek(pos)
-            line = fl.readline()
-            if not line:
-                return
-            cline = CommentLine.read(line.decode(), fastspec=fastspec)
-
+        # The data line is not the expected length: read all of it.
+        fl.seek(pos + len(comment))
         line = fl.readline()
         if not line:
             # We reached the end of the file.
             return
         try:
-            entry = _read_entry(cline, line.decode())
+            entry = _read_entry(cline, _as_text(line))
         except ACQLineError as e:
             warnings.warn(str(e), stacklevel=1)
             entry = None
@@ -534,7 +573,7 @@ def read_metadata(fname: str | Path) -> tuple[dict, dict[str, np.ndarray]]:
         # As in decode_file, start at the first swpos=0 entry.
         for line in fl:
             if line.startswith(b"#"):
-                cline = CommentLine.read(line.decode(), fastspec=fastspec)
+                cline = CommentLine.read(_as_text(line), fastspec=fastspec)
                 if cline.swpos == 0:
                     break
         else:
@@ -543,8 +582,8 @@ def read_metadata(fname: str | Path) -> tuple[dict, dict[str, np.ndarray]]:
         line = fl.readline() if cline is not None else b""
         if line:
             # As in decode_file, a bad first entry is an error.
-            first = _read_entry(cline, line.decode())
-            entries = _iter_entries_without_spectra(fl, fastspec)
+            first = _read_entry(cline, _as_text(line))
+            entries = _iter_entries_without_spectra(fname, fl, fastspec)
             for datas in _complete_cycles(itertools.chain([first], entries)):
                 anc.append(datas)
 

@@ -172,6 +172,33 @@ def _only_partial_cycle(h, e):
     return _join(h, e[:2])
 
 
+_NUL = "\x00" * 5000
+
+
+def _nul_padded_after_complete_cycles(h, e):
+    return _join(h, e[:6]) + _NUL
+
+
+def _nul_padded_mid_cycle(h, e):
+    return _join(h, e[:7]) + _NUL
+
+
+def _nul_padded_data_line(h, e):
+    return _join(h, e[:7]) + e[7][0] + _NUL
+
+
+def _malformed_comment_mid_file(h, e):
+    # decode_file then also tries (and fails) to read the data line as a comment.
+    e[6][0] = "# garbage\n"
+    return _join(h, e)
+
+
+def _crlf_with_data_line_cut_before_spectrum(h, e):
+    # The warning shows the start of the line, which must not include the "\r".
+    e[7][1] = e[7][1].split(" spectrum ")[0] + "\n"
+    return _crlf(h, e)
+
+
 MODIFIERS: dict[str, Callable] = {
     f.__name__.lstrip("_"): f
     for f in [
@@ -193,6 +220,11 @@ MODIFIERS: dict[str, Callable] = {
         _tab_before_spectrum,
         _crlf,
         _only_partial_cycle,
+        _nul_padded_after_complete_cycles,
+        _nul_padded_mid_cycle,
+        _nul_padded_data_line,
+        _malformed_comment_mid_file,
+        _crlf_with_data_line_cut_before_spectrum,
     ]
 }
 
